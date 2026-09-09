@@ -3,7 +3,7 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- PAGE CONFIG & COMPACT MOBILE STYLING ---
+# --- PAGE CONFIG & ULTRA-COMPACT MOBILE STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 st.markdown("""
@@ -12,32 +12,39 @@ st.markdown("""
     .block-container { padding-top: 0.2rem !important; padding-bottom: 0.3rem !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0.15rem !important; }
     
-    /* Compact Mode Radio Toggle */
+    /* Segmented Control / Radio Buttons Top Bar */
+    div[data-testid="stRadio"] { margin-bottom: 0.2rem !important; }
     div[role="radiogroup"] {
-        background-color: #f0f2f6;
-        padding: 3px;
-        border-radius: 6px;
-        display: flex;
-        justify-content: space-around;
-        margin-bottom: 2px;
+        background-color: #e2e8f0 !important;
+        padding: 4px !important;
+        border-radius: 8px !important;
+        display: flex !important;
+        width: 100% !important;
+        justify-content: space-between !important;
     }
     div[role="radiogroup"] label {
-        font-size: 0.8rem !important;
+        flex: 1 !important;
+        text-align: center !important;
+        padding: 4px 0px !important;
+        margin: 0px !important;
+        border-radius: 6px !important;
+        font-size: 0.82rem !important;
         font-weight: 600 !important;
+        cursor: pointer !important;
     }
 
     /* Small Pill Button Styling for Location Selections */
     .stButton button { 
-        padding: 0.1rem 0.25rem !important; 
+        padding: 0.1rem 0.2rem !important; 
         font-size: 0.75rem !important; 
         height: 28px !important; 
         min-height: 28px !important;
     }
 
-    .stTextInput input { 
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] { 
         padding: 0.15rem 0.3rem !important; 
         font-size: 0.8rem !important; 
-        height: 32px !important; 
+        min-height: 32px !important; 
     }
 
     hr { margin: 0.25rem 0 !important; }
@@ -127,10 +134,10 @@ if not items:
     st.stop()
 
 # ==============================================================================
-# MODE SELECTOR (ALWAYS PRESENT AT TOP)
+# ALWAYS-VISIBLE MODE SELECTOR AT TOP
 # ==============================================================================
 app_mode = st.radio(
-    "Mode Selector",
+    "App Mode",
     options=["🔍 Item Search", "📦 Bin Filling"],
     horizontal=True,
     key="global_app_mode_toggle",
@@ -139,7 +146,7 @@ app_mode = st.radio(
 
 st.markdown("<hr/>", unsafe_allow_html=True)
 
-# Helper function to render horizontal button selection pills instead of dropdowns
+# Helper function to render horizontal button selection pills
 def render_button_picker(prefix_key, options, default_val):
     if f"{prefix_key}_selected" not in st.session_state:
         st.session_state[f"{prefix_key}_selected"] = default_val
@@ -155,54 +162,35 @@ def render_button_picker(prefix_key, options, default_val):
     return st.session_state[f"{prefix_key}_selected"]
 
 # ==============================================================================
-# MODE 1: ITEM SEARCH MODE
+# MODE 1: ITEM SEARCH MODE (SINGLE UNIFIED SEARCH FIELD)
 # ==============================================================================
 if app_mode == "🔍 Item Search":
     if "current_index" not in st.session_state:
         st.session_state.current_index = 0
 
-    st.caption("🔍 **Search Medicine:**")
-    search_term = st.text_input(
-        "Search",
-        key="search_term_input",
-        placeholder="Type 4 digits or medicine name",
-        label_visibility="collapsed"
-    ).strip().upper()
-
-    if search_term:
-        if len(search_term) == 4 and search_term.isdigit():
-            filtered_items = [itm for itm in items if itm["item_code"].endswith(search_term)]
-        else:
-            filtered_items = [
-                itm for itm in items 
-                if search_term in itm["item_code"] or search_term in itm["description"].upper()
-            ]
-    else:
-        filtered_items = items
-
-    item_options = {}
-    for idx, itm in enumerate(filtered_items):
+    st.caption("🔍 **Search & Select Medicine:**")
+    
+    # Build options mapping for the searchable selectbox
+    search_options = {}
+    for idx, itm in enumerate(items):
         code = itm["item_code"]
         desc = itm["description"]
         last_4 = code[-4:] if len(code) >= 4 else code
         label = f"[{last_4}] {code} — {desc}"
-        item_options[label] = items.index(itm)
+        search_options[label] = idx
 
-    if not item_options:
-        st.warning("No matching items.")
-    else:
-        selected_label = st.selectbox(
-            "Select Item",
-            options=list(item_options.keys()),
-            key="search_dropdown",
-            label_visibility="collapsed"
-        )
+    # Unified 1-field search: users type 4 digits or name directly here
+    selected_item_label = st.selectbox(
+        "Search Item",
+        options=list(search_options.keys()),
+        index=st.session_state.current_index,
+        key="unified_item_search",
+        placeholder="Type 4 digits or item name...",
+        label_visibility="collapsed"
+    )
 
-        if selected_label in item_options:
-            selected_idx = item_options[selected_label]
-            if st.session_state.current_index != selected_idx:
-                st.session_state.current_index = selected_idx
-                st.rerun()
+    if selected_item_label and selected_item_label in search_options:
+        st.session_state.current_index = search_options[selected_item_label]
 
     current_item = items[st.session_state.current_index]
 
