@@ -66,7 +66,9 @@ def get_gspread_client():
 try:
     gc = get_gspread_client()
     SHEET_NAME = "HMC MCP Store Locations"
-    sheet = gc.open(SHEET_NAME).sheet1
+    spreadsheet = gc.open(SHEET_NAME)
+    sheet = spreadsheet.sheet1
+    sheet_url = spreadsheet.url  # Captured for the external link button
 except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
     st.stop()
@@ -132,13 +134,20 @@ if not items:
 # Restore mode from disk
 default_mode = persisted_data.get("app_mode", "🔍 Item Search")
 
-app_mode = st.radio(
-    "Select Mode",
-    options=["🔍 Item Search", "📦 Bin Filling"],
-    index=0 if default_mode == "🔍 Item Search" else 1,
-    horizontal=True,
-    key="global_app_mode_toggle"
-)
+col_mode, col_sheet_btn = st.columns([3, 1])
+
+with col_mode:
+    app_mode = st.radio(
+        "Select Mode",
+        options=["🔍 Item Search", "📦 Bin Filling"],
+        index=0 if default_mode == "🔍 Item Search" else 1,
+        horizontal=True,
+        key="global_app_mode_toggle",
+        label_visibility="collapsed"
+    )
+
+with col_sheet_btn:
+    st.link_button("📂 Open Sheet", sheet_url, use_container_width=True)
 
 save_persistent_state({"app_mode": app_mode})
 
@@ -277,7 +286,6 @@ else:
 
     p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
 
-    # Initialize input session variables if not present
     if "bin_area_val" not in st.session_state:
         st.session_state.bin_area_val = p_bin.get("area", "A1")
     if "bin_type_val" not in st.session_state:
@@ -289,7 +297,6 @@ else:
     if "focus_item_search" not in st.session_state:
         st.session_state.focus_item_search = False
 
-    # Setup Sigma Limits Expander
     with st.expander("⚙️ Location Bounds Config (Sigma 3 & 4)", expanded=False):
         c_conf1, c_conf2 = st.columns(2)
         sig3_code = c_conf1.text_input("Sigma 3 (e.g. AA = Cabinet A, Row A)", value="AA").strip().upper()
@@ -297,7 +304,6 @@ else:
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
-    # Render inputs directly capturing user values instantly
     in_area = col_a.text_input("Area*", value=st.session_state.bin_area_val, key="bin_area_in").strip().upper()
     in_type = col_t.text_input("Type*", value=st.session_state.bin_type_val, key="bin_type_in").strip().upper()
     
@@ -307,7 +313,6 @@ else:
     in_sig1 = col_s1.text_input(sig1_label, value=st.session_state.bin_sig1_val, key="bin_sig1_in").strip().upper()
     in_sig2 = col_s2.text_input(sig2_label, value=st.session_state.bin_sig2_val, key="bin_sig2_in").strip().upper()
 
-    # Sync values back into session state
     st.session_state.bin_area_val = in_area
     st.session_state.bin_type_val = in_type
     st.session_state.bin_sig1_val = in_sig1
@@ -330,7 +335,6 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
-    # Next Bin / Drawer Actions
     if all_fields_filled:
         col_next1, col_next2 = st.columns(2)
         if col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True):
@@ -391,7 +395,6 @@ else:
         disabled=not all_fields_filled
     )
 
-    # Injected JavaScript for automatic cursor focus transition
     should_focus = "true" if st.session_state.focus_item_search else "false"
     st.components.v1.html(
         f"""
@@ -413,7 +416,6 @@ else:
         """,
         height=0
     )
-    # Reset focus trigger flag
     st.session_state.focus_item_search = False
 
     search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
