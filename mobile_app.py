@@ -1,7 +1,32 @@
+import json
+import os
 import re
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
+
+# --- PERSISTENT STATE HELPER ---
+STATE_FILE = ".last_state.json"
+
+def load_persistent_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_persistent_state(data: dict):
+    try:
+        current = load_persistent_state()
+        current.update(data)
+        with open(STATE_FILE, "w") as f:
+            json.dump(current, f)
+    except Exception:
+        pass
+
+persisted_data = load_persistent_state()
 
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
@@ -16,6 +41,9 @@ st.markdown("""
         display: flex;
         justify-content: space-around;
         margin-bottom: 10px;
+    }
+    input {
+        text-transform: uppercase;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -63,10 +91,10 @@ def load_data():
 
     for row_idx, row in enumerate(records, start=2):
         code = str(row.get('Item Code', '')).strip().upper()
-        desc = str(row.get('Item Description', '')).strip()
-        uom = str(row.get('UOM', '')).strip()
-        sub_inv = str(row.get('Sub Inventory', '')).strip()
-        raw_loc = str(row.get('Location', '')).strip()
+        desc = str(row.get('Item Description', '')).strip().upper()
+        uom = str(row.get('UOM', '')).strip().upper()
+        sub_inv = str(row.get('Sub Inventory', '')).strip().upper()
+        raw_loc = str(row.get('Location', '')).strip().upper()
 
         parsed_locations = []
         if raw_loc:
@@ -101,15 +129,18 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# ==============================================================================
-# MODE SELECTOR (ITEM SEARCH vs BIN FILLING)
-# ==============================================================================
+# Restore mode from disk if available
+default_mode = persisted_data.get("app_mode", "🔍 Item Search")
+
 app_mode = st.radio(
     "Select Mode",
     options=["🔍 Item Search", "📦 Bin Filling"],
+    index=0 if default_mode == "🔍 Item Search" else 1,
     horizontal=True,
     key="global_app_mode_toggle"
 )
+
+save_persistent_state({"app_mode": app_mode})
 
 st.divider()
 
@@ -118,15 +149,16 @@ st.divider()
 # ==============================================================================
 if app_mode == "🔍 Item Search":
     if "current_index" not in st.session_state:
-        st.session_state.current_index = 0
+        st.session_state.current_index = persisted_data.get("last_item_index", 0)
 
     st.subheader("🔍 Item Search")
     
-    search_term = st.text_input(
+    raw_search = st.text_input(
         "Search Medicine (Type 4 digits or Name)",
         key="search_term_input",
-        placeholder="e.g. 1234 or Paracetamol"
-    ).strip().upper()
+        placeholder="E.G. 1234 OR PARACETAMOL"
+    )
+    search_term = raw_search.strip().upper()
 
     if search_term:
         if len(search_term) == 4 and search_term.isdigit():
@@ -134,7 +166,7 @@ if app_mode == "🔍 Item Search":
         else:
             matched_items = [
                 itm for itm in items 
-                if search_term in itm["item_code"] or search_term in itm["description"].upper()
+                if search_term in itm["item_code"] or search_term in itm["description"]
             ]
     else:
         matched_items = items
@@ -160,9 +192,11 @@ if app_mode == "🔍 Item Search":
             selected_idx = item_options[selected_label]
             if st.session_state.current_index != selected_idx:
                 st.session_state.current_index = selected_idx
+                save_persistent_state({"last_item_index": selected_idx})
                 st.rerun()
 
     current_item = items[st.session_state.current_index]
+    save_persistent_state({"last_item_index": st.session_state.current_index})
 
     st.caption(f"Item {st.session_state.current_index + 1} of {len(items)} | Code: `{current_item['item_code']}` | UOM: `{current_item['uom']}`")
     st.subheader(current_item["description"])
@@ -228,18 +262,29 @@ if app_mode == "🔍 Item Search":
     b_prev, b_next = st.columns(2)
     if b_prev.button("⬅️ Previous Item", use_container_width=True) and st.session_state.current_index > 0:
         st.session_state.current_index -= 1
+        save_persistent_state({"last_item_index": st.session_state.current_index})
         st.rerun()
     if b_next.button("Next Item ➡️", use_container_width=True) and st.session_state.current_index < len(items) - 1:
         st.session_state.current_index += 1
+        save_persistent_state({"last_item_index": st.session_state.current_index})
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN FILLING MODE (EDITABLE LOCATIONS & AUTO-CLEARING SEARCH)
+# MODE 2: BIN FILLING MODE (WITH SIGMA 3/4 CONFIG & NEXT NAV)
 # ==============================================================================
 else:
     st.subheader("📦 Bin Filling Mode")
 
-    # Callbacks for cascading clear when upstream location fields change
+    # Restore last known bin configuration
+    p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
+
+    # Setup Sigma Limits Expander
+    with st.expander("⚙️ Location Bounds Config (Sigma 3 & 4)", expanded=False):
+        c_conf1, c_conf2 = st.columns(2)
+        sig3_code = c_conf1.text_input("Sigma 3 (e.g. AA = Cabinet A, Row A)", value="AA").strip().upper()
+        max_sig4 = c_conf2.number_input("Max Sigma 4 (Columns/Bins)", min_value=1, max_value=99, value=30, step=1)
+
+    # Cascading reset callbacks
     def on_bin_area_change():
         st.session_state["bin_sig1_in"] = ""
         st.session_state["bin_sig2_in"] = ""
@@ -253,16 +298,15 @@ else:
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
-    bin_area = col_a.text_input("Area*", value="A1", key="bin_area_in", on_change=on_bin_area_change).strip().upper()
-    bin_type = col_t.text_input("Type*", value="DR", key="bin_type_in", on_change=on_bin_type_change).strip().upper()
+    bin_area = col_a.text_input("Area*", value=p_bin.get("area", "A1"), key="bin_area_in", on_change=on_bin_area_change).strip().upper()
+    bin_type = col_t.text_input("Type*", value=p_bin.get("type", "DR"), key="bin_type_in", on_change=on_bin_type_change).strip().upper()
     
-    sig1_label = "Series*" if bin_type == "DR" else "Sec*"
-    sig2_label = "Level*" if bin_type == "SH" else "Bin#*"
+    sig1_label = f"Sigma 3 ({sig3_code})*" if sig3_code else "Series*"
+    sig2_label = "Sigma 4 (Col#)*"
 
-    b_sig1 = col_s1.text_input(sig1_label, key="bin_sig1_in", on_change=on_sig1_change).strip().upper()
-    b_sig2 = col_s2.text_input(sig2_label, key="bin_sig2_in").strip().upper()
+    b_sig1 = col_s1.text_input(sig1_label, value=p_bin.get("sig1", ""), key="bin_sig1_in", on_change=on_sig1_change).strip().upper()
+    b_sig2 = col_s2.text_input(sig2_label, value=p_bin.get("sig2", ""), key="bin_sig2_in").strip().upper()
 
-    # Verify all fields are provided
     all_fields_filled = all([bin_area, bin_type, b_sig1, b_sig2])
 
     if all_fields_filled:
@@ -271,16 +315,43 @@ else:
         else:
             active_bin_gen = f"{bin_area}.{bin_type}.{b_sig1}.{b_sig2}"
         target_bin_location = fix_location_format(active_bin_gen)
+        save_persistent_state({
+            "last_bin_parts": {"area": bin_area, "type": bin_type, "sig1": b_sig1, "sig2": b_sig2},
+            "last_bin_location": target_bin_location
+        })
         st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
     else:
         target_bin_location = ""
-        st.warning("⚠️ Please fill in all location fields (Area, Type, Series/Sec, Bin/Level).")
+        st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
+
+    # Next Drawer / Shelf Quick Increment Action
+    if all_fields_filled:
+        col_next1, col_next2 = st.columns(2)
+        if col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True):
+            try:
+                curr_num = int(b_sig2)
+                if curr_num < max_sig4:
+                    st.session_state["bin_sig2_in"] = f"{curr_num + 1:02d}"
+                    st.rerun()
+                else:
+                    st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
+            except ValueError:
+                st.error("Sigma 4 must be numeric to increment.")
+
+        if col_next2.button("📑 Next Drawer / Row", use_container_width=True):
+            if len(b_sig1) == 2:
+                # Increment second char e.g., AA -> AB
+                first_char, second_char = b_sig1[0], b_sig1[1]
+                next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
+                st.session_state["bin_sig1_in"] = next_sig1
+                st.session_state["bin_sig2_in"] = "01"
+                st.rerun()
 
     st.divider()
 
     # Session state for tracking last assigned item
     if "last_assigned_item" not in st.session_state:
-        st.session_state.last_assigned_item = None
+        st.session_state.last_assigned_item = persisted_data.get("last_assigned_item_data", None)
 
     def execute_assignment(target_item):
         if target_bin_location not in target_item["locations"]:
@@ -288,14 +359,12 @@ else:
             sheet.update_cell(target_item["row_indices"][0], 5, "\n".join(updated))
             st.toast(f"Assigned {target_item['item_code']} to {target_bin_location}!", icon="✅")
             st.cache_data.clear()
-            # Retain last assigned item details & clear input
             st.session_state.last_assigned_item = target_item
+            save_persistent_state({"last_assigned_item_data": target_item})
             st.session_state["bin_digit_srch"] = ""
 
     def handle_search_and_assign():
         val = st.session_state.get("bin_digit_srch", "").strip().upper()
-        
-        # As soon as user types/modifies the search field, clear the last displayed item
         if val:
             st.session_state.last_assigned_item = None
 
@@ -303,26 +372,25 @@ else:
             if len(val) == 4 and val.isdigit():
                 matches = [i for i in items if i["item_code"].endswith(val)]
             else:
-                matches = [i for i in items if val in i["item_code"] or val in i["description"].upper()]
+                matches = [i for i in items if val in i["item_code"] or val in i["description"]]
             
             if len(matches) == 1:
                 execute_assignment(matches[0])
 
     st.text_input(
         "Search Item to Assign (Type 4 digits or Name)",
-        placeholder="e.g. 1234 or Paracetamol",
+        placeholder="E.G. 1234 OR PARACETAMOL",
         key="bin_digit_srch",
         on_change=handle_search_and_assign,
         disabled=not all_fields_filled
     )
 
-    # Show matching results if user is actively searching
     search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
     if search_val:
         if len(search_val) == 4 and search_val.isdigit():
             matched_items = [itm for itm in items if itm["item_code"].endswith(search_val)]
         else:
-            matched_items = [itm for itm in items if search_val in itm["item_code"] or search_val in itm["description"].upper()]
+            matched_items = [itm for itm in items if search_val in itm["item_code"] or search_val in itm["description"]]
         
         if matched_items and all_fields_filled:
             for m in matched_items:
@@ -336,7 +404,6 @@ else:
                     execute_assignment(m)
                     st.rerun()
 
-    # Display last assigned item details until a new query is typed
     if st.session_state.last_assigned_item and not search_val:
         last_item = st.session_state.last_assigned_item
         st.info(f"✅ **Last Assigned Item:** {last_item['description']} (`{last_item['item_code']}`) — UOM: `{last_item['uom']}`")
