@@ -129,7 +129,7 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# Restore mode from disk if available
+# Restore mode from disk
 default_mode = persisted_data.get("app_mode", "🔍 Item Search")
 
 app_mode = st.radio(
@@ -270,13 +270,22 @@ if app_mode == "🔍 Item Search":
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN FILLING MODE (WITH SIGMA 3/4 CONFIG & NEXT NAV)
+# MODE 2: BIN FILLING MODE
 # ==============================================================================
 else:
     st.subheader("📦 Bin Filling Mode")
 
-    # Restore last known bin configuration
     p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
+
+    # Initialize input session variables
+    if "bin_area_val" not in st.session_state:
+        st.session_state.bin_area_val = p_bin.get("area", "A1")
+    if "bin_type_val" not in st.session_state:
+        st.session_state.bin_type_val = p_bin.get("type", "DR")
+    if "bin_sig1_val" not in st.session_state:
+        st.session_state.bin_sig1_val = p_bin.get("sig1", "")
+    if "bin_sig2_val" not in st.session_state:
+        st.session_state.bin_sig2_val = p_bin.get("sig2", "")
 
     # Setup Sigma Limits Expander
     with st.expander("⚙️ Location Bounds Config (Sigma 3 & 4)", expanded=False):
@@ -284,28 +293,39 @@ else:
         sig3_code = c_conf1.text_input("Sigma 3 (e.g. AA = Cabinet A, Row A)", value="AA").strip().upper()
         max_sig4 = c_conf2.number_input("Max Sigma 4 (Columns/Bins)", min_value=1, max_value=99, value=30, step=1)
 
-    # Cascading reset callbacks
+    # Callbacks to adjust state safely before widget instantiation
     def on_bin_area_change():
-        st.session_state["bin_sig1_in"] = ""
-        st.session_state["bin_sig2_in"] = ""
+        st.session_state.bin_area_val = st.session_state.bin_area_in.strip().upper()
+        st.session_state.bin_sig1_val = ""
+        st.session_state.bin_sig2_val = ""
 
     def on_bin_type_change():
-        st.session_state["bin_sig1_in"] = ""
-        st.session_state["bin_sig2_in"] = ""
+        st.session_state.bin_type_val = st.session_state.bin_type_in.strip().upper()
+        st.session_state.bin_sig1_val = ""
+        st.session_state.bin_sig2_val = ""
 
     def on_sig1_change():
-        st.session_state["bin_sig2_in"] = ""
+        st.session_state.bin_sig1_val = st.session_state.bin_sig1_in.strip().upper()
+        st.session_state.bin_sig2_val = ""
+
+    def on_sig2_change():
+        st.session_state.bin_sig2_val = st.session_state.bin_sig2_in.strip().upper()
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
-    bin_area = col_a.text_input("Area*", value=p_bin.get("area", "A1"), key="bin_area_in", on_change=on_bin_area_change).strip().upper()
-    bin_type = col_t.text_input("Type*", value=p_bin.get("type", "DR"), key="bin_type_in", on_change=on_bin_type_change).strip().upper()
+    col_a.text_input("Area*", value=st.session_state.bin_area_val, key="bin_area_in", on_change=on_bin_area_change)
+    col_t.text_input("Type*", value=st.session_state.bin_type_val, key="bin_type_in", on_change=on_bin_type_change)
     
     sig1_label = f"Sigma 3 ({sig3_code})*" if sig3_code else "Series*"
     sig2_label = "Sigma 4 (Col#)*"
 
-    b_sig1 = col_s1.text_input(sig1_label, value=p_bin.get("sig1", ""), key="bin_sig1_in", on_change=on_sig1_change).strip().upper()
-    b_sig2 = col_s2.text_input(sig2_label, value=p_bin.get("sig2", ""), key="bin_sig2_in").strip().upper()
+    col_s1.text_input(sig1_label, value=st.session_state.bin_sig1_val, key="bin_sig1_in", on_change=on_sig1_change)
+    col_s2.text_input(sig2_label, value=st.session_state.bin_sig2_val, key="bin_sig2_in", on_change=on_sig2_change)
+
+    bin_area = st.session_state.bin_area_val
+    bin_type = st.session_state.bin_type_val
+    b_sig1 = st.session_state.bin_sig1_val
+    b_sig2 = st.session_state.bin_sig2_val
 
     all_fields_filled = all([bin_area, bin_type, b_sig1, b_sig2])
 
@@ -324,14 +344,14 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
-    # Next Drawer / Shelf Quick Increment Action
+    # Next Bin / Drawer Actions
     if all_fields_filled:
         col_next1, col_next2 = st.columns(2)
         if col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True):
             try:
                 curr_num = int(b_sig2)
                 if curr_num < max_sig4:
-                    st.session_state["bin_sig2_in"] = f"{curr_num + 1:02d}"
+                    st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
                     st.rerun()
                 else:
                     st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
@@ -340,16 +360,14 @@ else:
 
         if col_next2.button("📑 Next Drawer / Row", use_container_width=True):
             if len(b_sig1) == 2:
-                # Increment second char e.g., AA -> AB
                 first_char, second_char = b_sig1[0], b_sig1[1]
                 next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
-                st.session_state["bin_sig1_in"] = next_sig1
-                st.session_state["bin_sig2_in"] = "01"
+                st.session_state.bin_sig1_val = next_sig1
+                st.session_state.bin_sig2_val = "01"
                 st.rerun()
 
     st.divider()
 
-    # Session state for tracking last assigned item
     if "last_assigned_item" not in st.session_state:
         st.session_state.last_assigned_item = persisted_data.get("last_assigned_item_data", None)
 
