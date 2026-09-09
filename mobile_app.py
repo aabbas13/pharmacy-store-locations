@@ -157,11 +157,11 @@ if app_mode == "Item-by-Item Mode":
             st.success("All items completed!")
 
 # ==============================================================================
-# MODE 2: BIN-FILLING MODE (SET LOCATION FIRST -> ADD MEDS BY LAST 4 DIGITS)
+# MODE 2: BIN-FILLING MODE (SET LOCATION FIRST -> ADD/UNASSIGN MEDS)
 # ==============================================================================
 else:
     st.subheader("📦 Bin-Filling Mode")
-    st.caption("Select a storage locator first, then add medications into it using their last 4 digits.")
+    st.caption("Select a storage locator first, then manage medications inside it.")
 
     # Location Input & Prefixes
     if "bin_location" not in st.session_state:
@@ -222,14 +222,13 @@ else:
                     st.caption(f"Code: `{m_code}` | Current Location: `{m_curr_loc}`")
                 with c2:
                     if st.button("➕ Assign", key=f"assign_{m_code}", type="primary", use_container_width=True):
-                        # Update Google Sheet
                         row_idx = m["row_indices"][0]
                         sheet.update_cell(row_idx, 5, target_location)
                         st.toast(f"Assigned {m_code} to {target_location}!", icon="✅")
                         st.cache_data.clear()
                         st.rerun()
 
-        # Display all items currently in this bin
+        # Display all items currently in this bin with Unassign feature
         st.markdown("---")
         st.write(f"### 📋 Medications currently in `{target_location}`:")
         current_bin_items = [itm for itm in items if target_location in itm["locations"]]
@@ -238,4 +237,15 @@ else:
             st.caption("No medications are assigned to this location yet.")
         else:
             for idx, b_item in enumerate(current_bin_items, start=1):
-                st.write(f"{idx}. **{b_item['description']}** (`{b_item['item_code']}`)")
+                col_info, col_unassign = st.columns([3, 1])
+                with col_info:
+                    st.write(f"{idx}. **{b_item['description']}**")
+                    st.caption(f"Code: `{b_item['item_code']}`")
+                with col_unassign:
+                    if st.button("❌ Unassign", key=f"unassign_{b_item['item_code']}_{idx}", use_container_width=True):
+                        row_idx = b_item["row_indices"][0]
+                        # Set cell in Column 5 to empty string
+                        sheet.update_cell(row_idx, 5, "")
+                        st.toast(f"Unassigned {b_item['item_code']} from {target_location}", icon="🗑️")
+                        st.cache_data.clear()
+                        st.rerun()
