@@ -128,7 +128,6 @@ if app_mode == "🔍 Item Search":
         placeholder="e.g. 1234 or Paracetamol"
     ).strip().upper()
 
-    # Handle 4-digit search match directly
     if search_term:
         if len(search_term) == 4 and search_term.isdigit():
             matched_items = [itm for itm in items if itm["item_code"].endswith(search_term)]
@@ -235,95 +234,127 @@ if app_mode == "🔍 Item Search":
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN FILLING MODE
+# MODE 2: BIN FILLING MODE (EDITABLE LOCATIONS & AUTO-CLEARING SEARCH)
 # ==============================================================================
 else:
     st.subheader("📦 Bin Filling Mode")
 
+    # Callbacks for cascading clear when upstream location fields change
+    def on_bin_area_change():
+        st.session_state["bin_sig1_in"] = ""
+        st.session_state["bin_sig2_in"] = ""
+
+    def on_bin_type_change():
+        st.session_state["bin_sig1_in"] = ""
+        st.session_state["bin_sig2_in"] = ""
+
+    def on_sig1_change():
+        st.session_state["bin_sig2_in"] = ""
+
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
-    bin_area = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key="bin_area_sel")
-    bin_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key="bin_type_sel")
+    bin_area = col_a.text_input("Area*", value="A1", key="bin_area_in", on_change=on_bin_area_change).strip().upper()
+    bin_type = col_t.text_input("Type*", value="DR", key="bin_type_in", on_change=on_bin_type_change).strip().upper()
+    
+    sig1_label = "Series*" if bin_type == "DR" else "Sec*"
+    sig2_label = "Level*" if bin_type == "SH" else "Bin#*"
 
-    if bin_type == "DR":
-        b_sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1")
-        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2")
-        active_bin_gen = f"{bin_area}.DR.{b_sig1}.{b_sig2}"
-    elif bin_type == "SH":
-        b_sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key="bin_sig1")
-        b_sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2")
-        active_bin_gen = f"{bin_area}.SH.{b_sig1}.{b_sig2}"
+    b_sig1 = col_s1.text_input(sig1_label, key="bin_sig1_in", on_change=on_sig1_change).strip().upper()
+    b_sig2 = col_s2.text_input(sig2_label, key="bin_sig2_in").strip().upper()
+
+    # Verify all fields are provided
+    all_fields_filled = all([bin_area, bin_type, b_sig1, b_sig2])
+
+    if all_fields_filled:
+        if bin_type == "FR":
+            active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
+        else:
+            active_bin_gen = f"{bin_area}.{bin_type}.{b_sig1}.{b_sig2}"
+        target_bin_location = fix_location_format(active_bin_gen)
+        st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
     else:
-        b_sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key="bin_sig1")
-        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2")
-        active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
-
-    target_bin_location = fix_location_format(active_bin_gen)
-    st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
+        target_bin_location = ""
+        st.warning("⚠️ Please fill in all location fields (Area, Type, Series/Sec, Bin/Level).")
 
     st.divider()
 
-    def handle_assign_by_enter():
+    # Session state for tracking last assigned item
+    if "last_assigned_item" not in st.session_state:
+        st.session_state.last_assigned_item = None
+
+    def execute_assignment(target_item):
+        if target_bin_location not in target_item["locations"]:
+            updated = target_item["locations"] + [target_bin_location]
+            sheet.update_cell(target_item["row_indices"][0], 5, "\n".join(updated))
+            st.toast(f"Assigned {target_item['item_code']} to {target_bin_location}!", icon="✅")
+            st.cache_data.clear()
+            # Retain last assigned item details & clear input
+            st.session_state.last_assigned_item = target_item
+            st.session_state["bin_digit_srch"] = ""
+
+    def handle_search_and_assign():
         val = st.session_state.get("bin_digit_srch", "").strip().upper()
+        
+        # As soon as user types/modifies the search field, clear the last displayed item
         if val:
+            st.session_state.last_assigned_item = None
+
+        if val and target_bin_location:
             if len(val) == 4 and val.isdigit():
                 matches = [i for i in items if i["item_code"].endswith(val)]
             else:
                 matches = [i for i in items if val in i["item_code"] or val in i["description"].upper()]
             
             if len(matches) == 1:
-                target_item = matches[0]
-                if target_bin_location not in target_item["locations"]:
-                    updated = target_item["locations"] + [target_bin_location]
-                    sheet.update_cell(target_item["row_indices"][0], 5, "\n".join(updated))
-                    st.toast(f"Assigned {target_item['item_code']}!", icon="✅")
-                    st.cache_data.clear()
+                execute_assignment(matches[0])
 
     st.text_input(
-        "Search Item to Assign to this Bin",
-        placeholder="Type 4 digits or item name",
+        "Search Item to Assign (Type 4 digits or Name)",
+        placeholder="e.g. 1234 or Paracetamol",
         key="bin_digit_srch",
-        on_change=handle_assign_by_enter
+        on_change=handle_search_and_assign,
+        disabled=not all_fields_filled
     )
 
-    digit_input = st.session_state.get("bin_digit_srch", "").strip().upper()
-    if digit_input:
-        if len(digit_input) == 4 and digit_input.isdigit():
-            matched_items = [itm for itm in items if itm["item_code"].endswith(digit_input)]
+    # Show matching results if user is actively searching
+    search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
+    if search_val:
+        if len(search_val) == 4 and search_val.isdigit():
+            matched_items = [itm for itm in items if itm["item_code"].endswith(search_val)]
         else:
-            matched_items = [itm for itm in items if digit_input in itm["item_code"] or digit_input in itm["description"].upper()]
-    else:
-        matched_items = []
-
-    if matched_items:
-        for m in matched_items:
-            m_code = m["item_code"]
-            m_desc = m["description"]
-            m_locs = m["locations"]
-            
-            cm1, cm2 = st.columns([3, 1])
-            cm1.write(f"**{m_desc}** (`{m_code}`)")
-            if cm2.button("➕ Assign", key=f"bin_assign_{m_code}", type="primary"):
-                if target_bin_location not in m_locs:
-                    updated_locs = m_locs + [target_bin_location]
-                    sheet.update_cell(m["row_indices"][0], 5, "\n".join(updated_locs))
-                    st.toast(f"Assigned {m_code}!", icon="✅")
-                    st.cache_data.clear()
+            matched_items = [itm for itm in items if search_val in itm["item_code"] or search_val in itm["description"].upper()]
+        
+        if matched_items and all_fields_filled:
+            for m in matched_items:
+                m_code = m["item_code"]
+                m_desc = m["description"]
+                m_locs = m["locations"]
+                
+                cm1, cm2 = st.columns([3, 1])
+                cm1.write(f"**{m_desc}** (`{m_code}`)")
+                if cm2.button("➕ Assign", key=f"bin_assign_{m_code}", type="primary"):
+                    execute_assignment(m)
                     st.rerun()
 
-    st.divider()
-    st.write(f"### 📋 Items currently in `{target_bin_location}`:")
-    current_bin_items = [itm for itm in items if target_bin_location in itm["locations"]]
+    # Display last assigned item details until a new query is typed
+    if st.session_state.last_assigned_item and not search_val:
+        last_item = st.session_state.last_assigned_item
+        st.info(f"✅ **Last Assigned Item:** {last_item['description']} (`{last_item['item_code']}`) — UOM: `{last_item['uom']}`")
 
-    if not current_bin_items:
-        st.info("No items assigned to this bin yet.")
-    else:
-        for idx, b_item in enumerate(current_bin_items, start=1):
-            cb_info, cb_del = st.columns([4, 1])
-            cb_info.write(f"**{idx}.** {b_item['description']} (`{b_item['item_code']}`)")
-            if cb_del.button("❌", key=f"bin_unassign_{b_item['item_code']}_{idx}"):
-                updated_locs = [l for l in b_item["locations"] if l != target_bin_location]
-                sheet.update_cell(b_item["row_indices"][0], 5, "\n".join(updated_locs))
-                st.toast(f"Unassigned {b_item['item_code']}", icon="🗑️")
-                st.cache_data.clear()
-                st.rerun()
+    st.divider()
+    if all_fields_filled:
+        st.write(f"### 📋 Items currently in `{target_bin_location}`:")
+        current_bin_items = [itm for itm in items if target_bin_location in itm["locations"]]
+
+        if not current_bin_items:
+            st.info("No items assigned to this bin yet.")
+        else:
+            for idx, b_item in enumerate(current_bin_items, start=1):
+                cb_info, cb_del = st.columns([4, 1])
+                cb_info.write(f"**{idx}.** {b_item['description']} (`{b_item['item_code']}`)")
+                if cb_del.button("❌", key=f"bin_unassign_{b_item['item_code']}_{idx}"):
+                    updated_locs = [l for l in b_item["locations"] if l != target_bin_location]
+                    sheet.update_cell(b_item["row_indices"][0], 5, "\n".join(updated_locs))
+                    st.toast(f"Unassigned {b_item['item_code']}", icon="🗑️")
+                    st.cache_data.clear()
+                    st.rerun()
