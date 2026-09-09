@@ -3,58 +3,45 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- PAGE CONFIG & ULTRA-COMPACT MOBILE STYLING ---
+# --- PAGE CONFIG & COMPACT MOBILE STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 st.markdown("""
 <style>
     /* Global Compact Layout */
-    .block-container { padding-top: 0.2rem !important; padding-bottom: 0.3rem !important; padding-left: 0.2rem !important; padding-right: 0.2rem !important; }
+    .block-container { padding-top: 0.2rem !important; padding-bottom: 0.3rem !important; padding-left: 0.3rem !important; padding-right: 0.3rem !important; }
     div[data-testid="stVerticalBlock"] > div { gap: 0.15rem !important; }
     
-    /* Force Columns to Stay Side-by-Side on Mobile Screens */
-    div[data-testid="column"] { 
-        padding: 0px 1px !important; 
-        min-width: 0px !important;
-        flex: 1 1 0% !important;
-    }
-
-    /* Target Selectboxes & Inputs to consume minimal height */
-    .stSelectbox div[data-baseweb="select"] { 
-        min-height: 28px !important; 
-        font-size: 0.75rem !important; 
-    }
-    .stSelectbox label, .stTextInput label {
-        display: none !important; /* Hide labels to save vertical height */
-    }
-    .stButton button { 
-        padding: 0.15rem 0.25rem !important; 
-        font-size: 0.75rem !important; 
-        height: 28px !important; 
-    }
-    .stTextInput input { 
-        padding: 0.15rem 0.3rem !important; 
-        font-size: 0.75rem !important; 
-        height: 28px !important; 
-    }
-
-    /* Compact Top Mode Navigation */
+    /* Compact Mode Radio Toggle */
     div[role="radiogroup"] {
         background-color: #f0f2f6;
-        padding: 2px;
+        padding: 3px;
         border-radius: 6px;
         display: flex;
         justify-content: space-around;
         margin-bottom: 2px;
     }
     div[role="radiogroup"] label {
-        display: flex !important;
-        font-size: 0.75rem !important;
-        padding: 2px 4px !important;
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
     }
-    
-    hr { margin: 0.2rem 0 !important; }
-    .stCaption { font-size: 0.7rem !important; margin-bottom: 0px !important; line-height: 1.1 !important; }
+
+    /* Small Pill Button Styling for Location Selections */
+    .stButton button { 
+        padding: 0.1rem 0.25rem !important; 
+        font-size: 0.75rem !important; 
+        height: 28px !important; 
+        min-height: 28px !important;
+    }
+
+    .stTextInput input { 
+        padding: 0.15rem 0.3rem !important; 
+        font-size: 0.8rem !important; 
+        height: 32px !important; 
+    }
+
+    hr { margin: 0.25rem 0 !important; }
+    .stCaption { font-size: 0.72rem !important; margin-bottom: 0px !important; line-height: 1.1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,7 +127,7 @@ if not items:
     st.stop()
 
 # ==============================================================================
-# PROMINENT MODE SELECTOR AT THE TOP
+# MODE SELECTOR (ALWAYS PRESENT AT TOP)
 # ==============================================================================
 app_mode = st.radio(
     "Mode Selector",
@@ -151,6 +138,21 @@ app_mode = st.radio(
 )
 
 st.markdown("<hr/>", unsafe_allow_html=True)
+
+# Helper function to render horizontal button selection pills instead of dropdowns
+def render_button_picker(prefix_key, options, default_val):
+    if f"{prefix_key}_selected" not in st.session_state:
+        st.session_state[f"{prefix_key}_selected"] = default_val
+
+    cols = st.columns(len(options))
+    for idx, opt in enumerate(options):
+        is_active = (st.session_state[f"{prefix_key}_selected"] == opt)
+        btn_type = "primary" if is_active else "secondary"
+        if cols[idx].button(opt, key=f"{prefix_key}_btn_{opt}", type=btn_type, use_container_width=True):
+            st.session_state[f"{prefix_key}_selected"] = opt
+            st.rerun()
+            
+    return st.session_state[f"{prefix_key}_selected"]
 
 # ==============================================================================
 # MODE 1: ITEM SEARCH MODE
@@ -224,25 +226,36 @@ if app_mode == "🔍 Item Search":
         st.info("No location assigned yet.")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    st.caption("📍 **Set Location (Area | Type | Series/Sec | Bin#):**")
+    st.caption("📍 **Configure Location (Button Picker):**")
 
-    # Ultra-Compact 1-Line Dropdowns
-    col_a, col_t, col_s1, col_s2 = st.columns([1, 1, 1.1, 1.1])
-    area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}", label_visibility="collapsed")
-    loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}", label_visibility="collapsed")
+    # Area Selection Pills
+    st.caption("Area:")
+    sel_area = render_button_picker("item_area", ["A1", "A2", "CR", "B1"], "A1")
 
-    if loc_type == "DR":
-        sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}", label_visibility="collapsed")
-        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}", label_visibility="collapsed")
-        generated_location = f"{area_val}.DR.{sig1}.{sig2}"
-    elif loc_type == "SH":
-        sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}", label_visibility="collapsed")
-        sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}", label_visibility="collapsed")
-        generated_location = f"{area_val}.SH.{sig1}.{sig2}"
-    else:
-        sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}", label_visibility="collapsed")
-        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}", label_visibility="collapsed")
-        generated_location = f"{area_val}.{sig1}.01.{sig2}"
+    # Type Selection Pills
+    st.caption("Type:")
+    sel_type = render_button_picker("item_type", ["DR", "SH", "FR"], "DR")
+
+    # Series/Sec and Bin/Level Selections
+    col1, col2 = st.columns(2)
+    with col1:
+        if sel_type == "DR":
+            sig1 = st.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="item_sig1_dr")
+        elif sel_type == "SH":
+            sig1 = st.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key="item_sig1_sh")
+        else:
+            sig1 = st.selectbox("Sec", ["FR", "RA", "RB"], key="item_sig1_fr")
+
+    with col2:
+        if sel_type == "DR":
+            sig2 = st.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key="item_sig2_dr")
+            generated_location = f"{sel_area}.DR.{sig1}.{sig2}"
+        elif sel_type == "SH":
+            sig2 = st.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key="item_sig2_sh")
+            generated_location = f"{sel_area}.SH.{sig1}.{sig2}"
+        else:
+            sig2 = st.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key="item_sig2_fr")
+            generated_location = f"{sel_area}.{sig1}.01.{sig2}"
 
     c_in, c_btn = st.columns([3, 1])
     target_loc_input = c_in.text_input(
@@ -279,26 +292,36 @@ if app_mode == "🔍 Item Search":
 # MODE 2: BIN FILLING MODE
 # ==============================================================================
 else:
-    st.caption("📦 **Active Bin (Area | Type | Series/Sec | Bin#):**")
+    st.caption("📦 **Set Active Bin Location:**")
 
-    # Ultra-Compact 1-Line Dropdowns
-    col_a, col_t, col_s1, col_s2 = st.columns([1, 1, 1.1, 1.1])
+    # Area Selection Pills
+    st.caption("Area:")
+    bin_area = render_button_picker("bin_area", ["A1", "A2", "CR", "B1"], "A1")
 
-    bin_area = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key="bin_area_sel", label_visibility="collapsed")
-    bin_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key="bin_type_sel", label_visibility="collapsed")
+    # Type Selection Pills
+    st.caption("Type:")
+    bin_type = render_button_picker("bin_type", ["DR", "SH", "FR"], "DR")
 
-    if bin_type == "DR":
-        b_sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1", label_visibility="collapsed")
-        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2", label_visibility="collapsed")
-        active_bin_gen = f"{bin_area}.DR.{b_sig1}.{b_sig2}"
-    elif bin_type == "SH":
-        b_sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key="bin_sig1", label_visibility="collapsed")
-        b_sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2", label_visibility="collapsed")
-        active_bin_gen = f"{bin_area}.SH.{b_sig1}.{b_sig2}"
-    else:
-        b_sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key="bin_sig1", label_visibility="collapsed")
-        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2", label_visibility="collapsed")
-        active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
+    # Series/Sec & Bin# Selections
+    col1, col2 = st.columns(2)
+    with col1:
+        if bin_type == "DR":
+            b_sig1 = st.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1_dr")
+        elif bin_type == "SH":
+            b_sig1 = st.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key="bin_sig1_sh")
+        else:
+            b_sig1 = st.selectbox("Sec", ["FR", "RA", "RB"], key="bin_sig1_fr")
+
+    with col2:
+        if bin_type == "DR":
+            b_sig2 = st.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2_dr")
+            active_bin_gen = f"{bin_area}.DR.{b_sig1}.{b_sig2}"
+        elif bin_type == "SH":
+            b_sig2 = st.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2_sh")
+            active_bin_gen = f"{bin_area}.SH.{b_sig1}.{b_sig2}"
+        else:
+            b_sig2 = st.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2_fr")
+            active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
 
     target_bin_location = fix_location_format(active_bin_gen)
     st.markdown(f"📍 Active Target: **`{target_bin_location}`**")
