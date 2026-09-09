@@ -286,6 +286,8 @@ else:
         st.session_state.bin_sig1_val = p_bin.get("sig1", "")
     if "bin_sig2_val" not in st.session_state:
         st.session_state.bin_sig2_val = p_bin.get("sig2", "")
+    if "focus_item_search" not in st.session_state:
+        st.session_state.focus_item_search = False
 
     # Setup Sigma Limits Expander
     with st.expander("⚙️ Location Bounds Config (Sigma 3 & 4)", expanded=False):
@@ -310,6 +312,8 @@ else:
 
     def on_sig2_change():
         st.session_state.bin_sig2_val = st.session_state.bin_sig2_in.strip().upper()
+        # Set flag to transfer cursor focus to item search input on re-render
+        st.session_state.focus_item_search = True
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
@@ -352,6 +356,7 @@ else:
                 curr_num = int(b_sig2)
                 if curr_num < max_sig4:
                     st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
+                    st.session_state.focus_item_search = True
                     st.rerun()
                 else:
                     st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
@@ -364,6 +369,7 @@ else:
                 next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
                 st.session_state.bin_sig1_val = next_sig1
                 st.session_state.bin_sig2_val = "01"
+                st.session_state.focus_item_search = True
                 st.rerun()
 
     st.divider()
@@ -402,6 +408,31 @@ else:
         on_change=handle_search_and_assign,
         disabled=not all_fields_filled
     )
+
+    # Injected JavaScript for automatic cursor focus transition
+    should_focus = "true" if st.session_state.focus_item_search else "false"
+    st.components.v1.html(
+        f"""
+        <script>
+        const shouldFocus = {should_focus};
+        if (shouldFocus) {{
+            const doc = window.parent.document;
+            setTimeout(() => {{
+                const inputs = doc.querySelectorAll('input[type="text"]');
+                inputs.forEach(input => {{
+                    if (input.placeholder && input.placeholder.includes("E.G. 1234")) {{
+                        input.focus();
+                        input.select();
+                    }}
+                }});
+            }}, 150);
+        }}
+        </script>
+        """,
+        height=0
+    )
+    # Reset focus trigger flag
+    st.session_state.focus_item_search = False
 
     search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
     if search_val:
