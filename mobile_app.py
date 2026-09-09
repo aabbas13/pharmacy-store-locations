@@ -119,26 +119,50 @@ if app_mode == "Item-by-Item Mode":
     if "current_index" not in st.session_state:
         st.session_state.current_index = 0
 
+    st.caption("🔍 **Search Medicine:**")
+    search_term = st.text_input(
+        "Type 4 digits (matches last 4) or medicine name:",
+        key="search_term_input",
+        placeholder="e.g., 1234 or Paracetamol"
+    ).strip().upper()
+
+    # Filtering logic:
+    # 1. If user typed exactly 4 digits -> filter strictly by last 4 digits of item_code
+    # 2. Otherwise -> filter if term is anywhere in item_code or description
+    if search_term:
+        if len(search_term) == 4 and search_term.isdigit():
+            filtered_items = [itm for itm in items if itm["item_code"].endswith(search_term)]
+        else:
+            filtered_items = [
+                itm for itm in items 
+                if search_term in itm["item_code"] or search_term in itm["description"].upper()
+            ]
+    else:
+        filtered_items = items
+
     item_options = {}
-    for idx, itm in enumerate(items):
+    for idx, itm in enumerate(filtered_items):
         code = itm["item_code"]
         desc = itm["description"]
         last_4 = code[-4:] if len(code) >= 4 else code
         label = f"[{last_4}] {code} — {desc}"
-        item_options[label] = idx
+        # Store original index from global items list
+        item_options[label] = items.index(itm)
 
-    search_query = st.selectbox(
-        "Search Medicine:",
-        options=[""] + list(item_options.keys()),
-        index=0,
-        key="search_dropdown"
-    )
+    if not item_options:
+        st.warning("No items match your search criteria.")
+    else:
+        selected_label = st.selectbox(
+            "Select Matching Medicine:",
+            options=list(item_options.keys()),
+            key="search_dropdown"
+        )
 
-    if search_query and search_query in item_options:
-        selected_idx = item_options[search_query]
-        if st.session_state.current_index != selected_idx:
-            st.session_state.current_index = selected_idx
-            st.rerun()
+        if selected_label in item_options:
+            selected_idx = item_options[selected_label]
+            if st.session_state.current_index != selected_idx:
+                st.session_state.current_index = selected_idx
+                st.rerun()
 
     current_item = items[st.session_state.current_index]
 
@@ -164,12 +188,10 @@ if app_mode == "Item-by-Item Mode":
     st.markdown("<hr/>", unsafe_allow_html=True)
     st.caption("➕ **Configure & Add Location:**")
 
-    # Segment 1: Area Selection
     c_area, c_type = st.columns(2)
     area_val = c_area.selectbox("Area:", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
     loc_type = c_type.selectbox("Type:", ["DR (Drawer)", "SH (Shelf)", "FR (Fridge)"], key=f"item_type_{st.session_state.current_index}")
 
-    # Segment 2: Multi-Field Location Parts (Sigma 1, Sigma 2, Sigma 3)
     if "DR" in loc_type:
         c_s1, c_s2 = st.columns(2)
         sig1 = c_s1.selectbox("Drawer Series (Σ1):", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
@@ -186,7 +208,6 @@ if app_mode == "Item-by-Item Mode":
         sig2 = c_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
         generated_location = f"{area_val}.{sig1}.01.{sig2}"
 
-    # Preview & Manual Override / Focus Enter Field
     c_in, c_btn = st.columns([3, 1])
     target_loc_input = c_in.text_input(
         "Final Locator (press Enter):", 
@@ -248,12 +269,16 @@ else:
     st.info(f"📍 Active Bin: **`{target_bin_location}`**")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    
-    # Item search inside Bin-Filling mode with Enter trigger
+
+    # Filtering logic for Bin-Filling Mode
     def handle_assign_by_enter():
         val = st.session_state.get("bin_digit_srch", "").strip().upper()
         if val:
-            matches = [i for i in items if i["item_code"].endswith(val) or val in i["item_code"]]
+            if len(val) == 4 and val.isdigit():
+                matches = [i for i in items if i["item_code"].endswith(val)]
+            else:
+                matches = [i for i in items if val in i["item_code"] or val in i["description"].upper()]
+            
             if len(matches) == 1:
                 target_item = matches[0]
                 if target_bin_location not in target_item["locations"]:
@@ -263,14 +288,20 @@ else:
                     st.cache_data.clear()
 
     st.text_input(
-        "Search Code/Last 4 Digits (Press Enter to quick-assign):",
-        placeholder="Enter digits then press Enter",
+        "Search Last 4 Digits or Medicine Name:",
+        placeholder="Type 4 digits to match end of code",
         key="bin_digit_srch",
         on_change=handle_assign_by_enter
     )
 
     digit_input = st.session_state.get("bin_digit_srch", "").strip().upper()
-    matched_items = [itm for itm in items if digit_input and (itm["item_code"].endswith(digit_input) or digit_input in itm["item_code"])]
+    if digit_input:
+        if len(digit_input) == 4 and digit_input.isdigit():
+            matched_items = [itm for itm in items if itm["item_code"].endswith(digit_input)]
+        else:
+            matched_items = [itm for itm in items if digit_input in itm["item_code"] or digit_input in itm["description"].upper()]
+    else:
+        matched_items = []
 
     if matched_items:
         for m in matched_items:
