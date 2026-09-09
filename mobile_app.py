@@ -277,7 +277,7 @@ else:
 
     p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
 
-    # Initialize input session variables
+    # Initialize input session variables if not present
     if "bin_area_val" not in st.session_state:
         st.session_state.bin_area_val = p_bin.get("area", "A1")
     if "bin_type_val" not in st.session_state:
@@ -295,52 +295,34 @@ else:
         sig3_code = c_conf1.text_input("Sigma 3 (e.g. AA = Cabinet A, Row A)", value="AA").strip().upper()
         max_sig4 = c_conf2.number_input("Max Sigma 4 (Columns/Bins)", min_value=1, max_value=99, value=30, step=1)
 
-    # Callbacks to adjust state safely before widget instantiation
-    def on_bin_area_change():
-        st.session_state.bin_area_val = st.session_state.bin_area_in.strip().upper()
-        st.session_state.bin_sig1_val = ""
-        st.session_state.bin_sig2_val = ""
-
-    def on_bin_type_change():
-        st.session_state.bin_type_val = st.session_state.bin_type_in.strip().upper()
-        st.session_state.bin_sig1_val = ""
-        st.session_state.bin_sig2_val = ""
-
-    def on_sig1_change():
-        st.session_state.bin_sig1_val = st.session_state.bin_sig1_in.strip().upper()
-        st.session_state.bin_sig2_val = ""
-
-    def on_sig2_change():
-        st.session_state.bin_sig2_val = st.session_state.bin_sig2_in.strip().upper()
-        # Set flag to transfer cursor focus to item search input on re-render
-        st.session_state.focus_item_search = True
-
     col_a, col_t, col_s1, col_s2 = st.columns(4)
 
-    col_a.text_input("Area*", value=st.session_state.bin_area_val, key="bin_area_in", on_change=on_bin_area_change)
-    col_t.text_input("Type*", value=st.session_state.bin_type_val, key="bin_type_in", on_change=on_bin_type_change)
+    # Render inputs directly capturing user values instantly
+    in_area = col_a.text_input("Area*", value=st.session_state.bin_area_val, key="bin_area_in").strip().upper()
+    in_type = col_t.text_input("Type*", value=st.session_state.bin_type_val, key="bin_type_in").strip().upper()
     
     sig1_label = f"Sigma 3 ({sig3_code})*" if sig3_code else "Series*"
     sig2_label = "Sigma 4 (Col#)*"
 
-    col_s1.text_input(sig1_label, value=st.session_state.bin_sig1_val, key="bin_sig1_in", on_change=on_sig1_change)
-    col_s2.text_input(sig2_label, value=st.session_state.bin_sig2_val, key="bin_sig2_in", on_change=on_sig2_change)
+    in_sig1 = col_s1.text_input(sig1_label, value=st.session_state.bin_sig1_val, key="bin_sig1_in").strip().upper()
+    in_sig2 = col_s2.text_input(sig2_label, value=st.session_state.bin_sig2_val, key="bin_sig2_in").strip().upper()
 
-    bin_area = st.session_state.bin_area_val
-    bin_type = st.session_state.bin_type_val
-    b_sig1 = st.session_state.bin_sig1_val
-    b_sig2 = st.session_state.bin_sig2_val
+    # Sync values back into session state
+    st.session_state.bin_area_val = in_area
+    st.session_state.bin_type_val = in_type
+    st.session_state.bin_sig1_val = in_sig1
+    st.session_state.bin_sig2_val = in_sig2
 
-    all_fields_filled = all([bin_area, bin_type, b_sig1, b_sig2])
+    all_fields_filled = all([in_area, in_type, in_sig1, in_sig2])
 
     if all_fields_filled:
-        if bin_type == "FR":
-            active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
+        if in_type == "FR":
+            active_bin_gen = f"{in_area}.{in_sig1}.01.{in_sig2}"
         else:
-            active_bin_gen = f"{bin_area}.{bin_type}.{b_sig1}.{b_sig2}"
+            active_bin_gen = f"{in_area}.{in_type}.{in_sig1}.{in_sig2}"
         target_bin_location = fix_location_format(active_bin_gen)
         save_persistent_state({
-            "last_bin_parts": {"area": bin_area, "type": bin_type, "sig1": b_sig1, "sig2": b_sig2},
+            "last_bin_parts": {"area": in_area, "type": in_type, "sig1": in_sig1, "sig2": in_sig2},
             "last_bin_location": target_bin_location
         })
         st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
@@ -353,7 +335,7 @@ else:
         col_next1, col_next2 = st.columns(2)
         if col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True):
             try:
-                curr_num = int(b_sig2)
+                curr_num = int(in_sig2)
                 if curr_num < max_sig4:
                     st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
                     st.session_state.focus_item_search = True
@@ -364,8 +346,8 @@ else:
                 st.error("Sigma 4 must be numeric to increment.")
 
         if col_next2.button("📑 Next Drawer / Row", use_container_width=True):
-            if len(b_sig1) == 2:
-                first_char, second_char = b_sig1[0], b_sig1[1]
+            if len(in_sig1) == 2:
+                first_char, second_char = in_sig1[0], in_sig1[1]
                 next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
                 st.session_state.bin_sig1_val = next_sig1
                 st.session_state.bin_sig2_val = "01"
