@@ -3,21 +3,20 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- PAGE CONFIG & COMPACT CSS ---
+# --- PAGE CONFIG & COMPACT MOBILE STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
-# Inject CSS for maximum compact view on mobile browsers
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem; padding-bottom: 1rem; padding-left: 0.5rem; padding-right: 0.5rem; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0.35rem; }
-    h1 { font-size: 1.3rem !important; margin-bottom: 0.2rem !important; }
-    h2 { font-size: 1.1rem !important; margin-bottom: 0.2rem !important; }
-    h3 { font-size: 0.95rem !important; margin-bottom: 0.2rem !important; }
-    .stButton button { padding: 0.2rem 0.5rem !important; font-size: 0.85rem !important; height: auto !important; }
-    .stTextInput input { padding: 0.25rem 0.5rem !important; font-size: 0.85rem !important; }
-    .stSelectbox div[data-baseweb="select"] { min-height: 32px !important; }
-    hr { margin: 0.4rem 0 !important; }
+    .block-container { padding-top: 0.5rem; padding-bottom: 0.5rem; padding-left: 0.5rem; padding-right: 0.5rem; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.3rem; }
+    h1 { font-size: 1.2rem !important; margin-bottom: 0.1rem !important; }
+    h2 { font-size: 1.05rem !important; margin-bottom: 0.1rem !important; }
+    h3 { font-size: 0.9rem !important; margin-bottom: 0.1rem !important; }
+    .stButton button { padding: 0.2rem 0.4rem !important; font-size: 0.85rem !important; height: auto !important; }
+    .stTextInput input { padding: 0.2rem 0.4rem !important; font-size: 0.85rem !important; }
+    .stSelectbox div[data-baseweb="select"] { min-height: 28px !important; }
+    hr { margin: 0.3rem 0 !important; }
     .stCaption { font-size: 0.75rem !important; margin-bottom: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -103,7 +102,7 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# --- COMPACT WORKFLOW MODE SELECTOR ---
+# WORKFLOW MODE SELECTOR
 app_mode = st.radio(
     "Mode:",
     ["Item-by-Item Mode", "Bin-Filling Mode"],
@@ -143,11 +142,9 @@ if app_mode == "Item-by-Item Mode":
 
     current_item = items[st.session_state.current_index]
 
-    # Compact Header Block
     st.caption(f"Med {st.session_state.current_index + 1}/{len(items)} | `{current_item['item_code']}` | UOM: `{current_item['uom']}`")
     st.subheader(current_item["description"])
 
-    # Registered Locations Compact Grid
     current_locations = current_item["locations"]
     if current_locations:
         st.caption("📍 **Registered Locations:**")
@@ -165,38 +162,46 @@ if app_mode == "Item-by-Item Mode":
         st.info("No location assigned yet.")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    st.caption("➕ **Add Location:**")
+    st.caption("➕ **Configure & Add Location:**")
 
-    input_key = f"new_loc_{st.session_state.current_index}"
-    if input_key not in st.session_state:
-        st.session_state[input_key] = ""
+    # Segment 1: Area Selection
+    c_area, c_type = st.columns(2)
+    area_val = c_area.selectbox("Area:", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
+    loc_type = c_type.selectbox("Type:", ["DR (Drawer)", "SH (Shelf)", "FR (Fridge)"], key=f"item_type_{st.session_state.current_index}")
 
-    # Compact Storage Quick Selectors
-    loc_type = st.radio("Type:", ["Drawers (DR)", "Shelves (SH)", "Fridge (FR)"], horizontal=True)
-
-    if loc_type == "Drawers (DR)":
-        c_dr1, c_dr2 = st.columns(2)
-        dr_prefix = c_dr1.selectbox("Drawer:", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"dr_p_{st.session_state.current_index}")
-        dr_num = c_dr2.selectbox("Bin #:", [f"{i:02d}" for i in range(1, 21)], key=f"dr_n_{st.session_state.current_index}")
-        target_gen = f"A1.DR.{dr_prefix}.{dr_num}"
-    elif loc_type == "Shelves (SH)":
-        c_sh1, c_sh2 = st.columns(2)
-        sh_sec = c_sh1.selectbox("Section:", ["A", "B", "C", "D", "E", "F"], key=f"sh_s_{st.session_state.current_index}")
-        sh_num = c_sh2.selectbox("Shelf #:", [f"{i:02d}" for i in range(1, 30)], key=f"sh_n_{st.session_state.current_index}")
-        target_gen = f"A1.SH.{sh_sec}.{sh_num}"
+    # Segment 2: Multi-Field Location Parts (Sigma 1, Sigma 2, Sigma 3)
+    if "DR" in loc_type:
+        c_s1, c_s2 = st.columns(2)
+        sig1 = c_s1.selectbox("Drawer Series (Σ1):", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = c_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.DR.{sig1}.{sig2}"
+    elif "SH" in loc_type:
+        c_s1, c_s2 = st.columns(2)
+        sig1 = c_s1.selectbox("Shelf Sec (Σ1):", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = c_s2.selectbox("Level # (Σ2):", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.SH.{sig1}.{sig2}"
     else:
-        c_fr1, c_fr2 = st.columns(2)
-        fr_sec = c_fr1.selectbox("Section:", ["FR", "RA", "RB"], key=f"fr_s_{st.session_state.current_index}")
-        fr_num = c_fr2.selectbox("Bin #:", [f"{i:02d}" for i in range(1, 15)], key=f"fr_n_{st.session_state.current_index}")
-        target_gen = f"CR.{fr_sec}.01.{fr_num}"
+        c_s1, c_s2 = st.columns(2)
+        sig1 = c_s1.selectbox("Fridge Sec (Σ1):", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = c_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.{sig1}.01.{sig2}"
 
-    c_in, c_btn = st.columns([3, 2])
-    raw_location = c_in.text_input("Loc:", value=target_gen, key=input_key, label_visibility="collapsed").strip().upper()
-    fixed_location = fix_location_format(raw_location)
+    # Preview & Manual Override / Focus Enter Field
+    c_in, c_btn = st.columns([3, 1])
+    target_loc_input = c_in.text_input(
+        "Final Locator (press Enter):", 
+        value=generated_location, 
+        key=f"item_loc_input_{st.session_state.current_index}",
+        label_visibility="collapsed"
+    ).strip().upper()
+
+    fixed_location = fix_location_format(target_loc_input)
 
     if c_btn.button("➕ Add", type="primary", use_container_width=True):
-        if fixed_location in current_locations:
-            st.warning("Already added.")
+        if not fixed_location:
+            st.warning("Invalid Location.")
+        elif fixed_location in current_locations:
+            st.warning("Already assigned.")
         else:
             updated_locs = current_locations + [fixed_location]
             sheet.update_cell(current_item["row_indices"][0], 5, "\n".join(updated_locs))
@@ -204,7 +209,6 @@ if app_mode == "Item-by-Item Mode":
             st.cache_data.clear()
             st.rerun()
 
-    # Navigation Buttons
     st.markdown("<hr/>", unsafe_allow_html=True)
     b_prev, b_next = st.columns(2)
     if b_prev.button("⬅️ Previous", use_container_width=True) and st.session_state.current_index > 0:
@@ -218,35 +222,54 @@ if app_mode == "Item-by-Item Mode":
 # MODE 2: BIN-FILLING MODE
 # ==============================================================================
 else:
-    st.caption("📦 **Select Storage Bin:**")
-    
-    bin_type = st.radio("Storage Category:", ["Drawers (DR)", "Shelves (SH)", "Fridge (FR)"], horizontal=True)
+    st.caption("📦 **Active Bin Configuration:**")
 
-    if bin_type == "Drawers (DR)":
-        col_b1, col_b2 = st.columns(2)
-        b_prefix = col_b1.selectbox("Series:", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="b_dr_p")
-        b_num = col_b2.selectbox("Number:", [f"{i:02d}" for i in range(1, 21)], key="b_dr_n")
-        active_bin = f"A1.DR.{b_prefix}.{b_num}"
-    elif bin_type == "Shelves (SH)":
-        col_s1, col_s2 = st.columns(2)
-        s_sec = col_s1.selectbox("Shelf Section:", ["A", "B", "C", "D", "E", "F"], key="b_sh_s")
-        s_num = col_s2.selectbox("Shelf Level:", [f"{i:02d}" for i in range(1, 30)], key="b_sh_n")
-        active_bin = f"A1.SH.{s_sec}.{s_num}"
+    c_bin_area, c_bin_type = st.columns(2)
+    bin_area = c_bin_area.selectbox("Area:", ["A1", "A2", "CR", "B1"], key="bin_area_sel")
+    bin_type = c_bin_type.selectbox("Type:", ["DR (Drawer)", "SH (Shelf)", "FR (Fridge)"], key="bin_type_sel")
+
+    if "DR" in bin_type:
+        cb_s1, cb_s2 = st.columns(2)
+        b_sig1 = cb_s1.selectbox("Drawer Series (Σ1):", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1")
+        b_sig2 = cb_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2")
+        active_bin_gen = f"{bin_area}.DR.{b_sig1}.{b_sig2}"
+    elif "SH" in bin_type:
+        cb_s1, cb_s2 = st.columns(2)
+        b_sig1 = cb_s1.selectbox("Shelf Sec (Σ1):", ["A", "B", "C", "D", "E", "F"], key="bin_sig1")
+        b_sig2 = cb_s2.selectbox("Level # (Σ2):", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2")
+        active_bin_gen = f"{bin_area}.SH.{b_sig1}.{b_sig2}"
     else:
-        col_f1, col_f2 = st.columns(2)
-        f_sec = col_f1.selectbox("Fridge Section:", ["FR", "RA", "RB"], key="b_fr_s")
-        f_num = col_f2.selectbox("Fridge Bin:", [f"{i:02d}" for i in range(1, 15)], key="b_fr_n")
-        active_bin = f"CR.{f_sec}.01.{f_num}"
+        cb_s1, cb_s2 = st.columns(2)
+        b_sig1 = cb_s1.selectbox("Fridge Sec (Σ1):", ["FR", "RA", "RB"], key="bin_sig1")
+        b_sig2 = cb_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2")
+        active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
 
-    target_location = fix_location_format(active_bin)
-    st.info(f"📍 Active Bin: **`{target_location}`**")
+    target_bin_location = fix_location_format(active_bin_gen)
+    st.info(f"📍 Active Bin: **`{target_bin_location}`**")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
     
-    # Quick Search & Add Med to Bin
-    c_srch, c_num_in = st.columns([3, 2])
-    digit_input = c_srch.text_input("Item Search:", placeholder="Last 4 digits / code", key="bin_digit_srch", label_visibility="collapsed").strip().upper()
+    # Item search inside Bin-Filling mode with Enter trigger
+    def handle_assign_by_enter():
+        val = st.session_state.get("bin_digit_srch", "").strip().upper()
+        if val:
+            matches = [i for i in items if i["item_code"].endswith(val) or val in i["item_code"]]
+            if len(matches) == 1:
+                target_item = matches[0]
+                if target_bin_location not in target_item["locations"]:
+                    updated = target_item["locations"] + [target_bin_location]
+                    sheet.update_cell(target_item["row_indices"][0], 5, "\n".join(updated))
+                    st.toast(f"Assigned {target_item['item_code']}!", icon="✅")
+                    st.cache_data.clear()
 
+    st.text_input(
+        "Search Code/Last 4 Digits (Press Enter to quick-assign):",
+        placeholder="Enter digits then press Enter",
+        key="bin_digit_srch",
+        on_change=handle_assign_by_enter
+    )
+
+    digit_input = st.session_state.get("bin_digit_srch", "").strip().upper()
     matched_items = [itm for itm in items if digit_input and (itm["item_code"].endswith(digit_input) or digit_input in itm["item_code"])]
 
     if matched_items:
@@ -258,16 +281,16 @@ else:
             cm1, cm2 = st.columns([3, 1])
             cm1.caption(f"**{m_desc}** (`{m_code}`)")
             if cm2.button("➕ Assign", key=f"bin_assign_{m_code}", type="primary"):
-                if target_location not in m_locs:
-                    updated_locs = m_locs + [target_location]
+                if target_bin_location not in m_locs:
+                    updated_locs = m_locs + [target_bin_location]
                     sheet.update_cell(m["row_indices"][0], 5, "\n".join(updated_locs))
                     st.toast(f"Assigned {m_code}!", icon="✅")
                     st.cache_data.clear()
                     st.rerun()
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    st.caption(f"📋 **Meds currently in `{target_location}`:**")
-    current_bin_items = [itm for itm in items if target_location in itm["locations"]]
+    st.caption(f"📋 **Meds currently in `{target_bin_location}`:**")
+    current_bin_items = [itm for itm in items if target_bin_location in itm["locations"]]
 
     if not current_bin_items:
         st.caption("No items in this bin.")
@@ -276,7 +299,7 @@ else:
             cb_info, cb_del = st.columns([4, 1])
             cb_info.markdown(f"**{idx}.** {b_item['description']} (`{b_item['item_code']}`)")
             if cb_del.button("❌", key=f"bin_unassign_{b_item['item_code']}_{idx}"):
-                updated_locs = [l for l in b_item["locations"] if l != target_location]
+                updated_locs = [l for l in b_item["locations"] if l != target_bin_location]
                 sheet.update_cell(b_item["row_indices"][0], 5, "\n".join(updated_locs))
                 st.toast(f"Unassigned {b_item['item_code']}", icon="🗑️")
                 st.cache_data.clear()
