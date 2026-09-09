@@ -21,7 +21,7 @@ def get_gspread_client():
 
 try:
     gc = get_gspread_client()
-    SHEET_NAME = "HMC MCP Store Locations" # Ensure exact name
+    SHEET_NAME = "HMC MCP Store Locations" # Ensure exact name matches your sheet
     sheet = gc.open(SHEET_NAME).sheet1
 except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
@@ -63,6 +63,35 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
+# --- SEARCH FEATURE (Last 4 Digits / Full Code / Description) ---
+st.subheader("🔍 Search Medicine")
+
+# Create lookup options mapping string formats to index
+item_options = {}
+for idx, itm in enumerate(items):
+    code = itm["item_code"]
+    desc = itm["description"]
+    last_4 = code[-4:] if len(code) >= 4 else code
+    # Formatted display label: [Last 4] Code - Description
+    label = f"[{last_4}] {code} — {desc}"
+    item_options[label] = idx
+
+search_query = st.selectbox(
+    "Search by last 4 digits, full code, or name:",
+    options=[""] + list(item_options.keys()),
+    index=0,
+    key="search_dropdown"
+)
+
+# Jump directly when a search item is selected
+if search_query and search_query in item_options:
+    selected_idx = item_options[search_query]
+    if st.session_state.current_index != selected_idx:
+        st.session_state.current_index = selected_idx
+        st.rerun()
+
+st.markdown("---")
+
 current_item = items[st.session_state.current_index]
 
 # Initialize input field in session_state if changing item
@@ -74,7 +103,6 @@ if input_key not in st.session_state:
 # Helper to prepend or replace prefix in session_state
 def apply_prefix(prefix):
     curr_text = st.session_state.get(input_key, "")
-    # If text already starts with a recognized prefix, swap it out
     known_prefixes = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
     for p in known_prefixes:
         if curr_text.startswith(p):
@@ -96,7 +124,7 @@ with col2:
 st.markdown("---")
 st.subheader("Oracle Locators")
 
-# Prefix Quick Insert Buttons using On-Click Callbacks
+# Prefix Quick Insert Buttons
 st.write("**Quick Prefixes:**")
 prefix_cols = st.columns(4)
 prefix_cols[0].button("A1.SH.", on_click=apply_prefix, args=("A1.SH.",), use_container_width=True)
@@ -104,7 +132,7 @@ prefix_cols[1].button("A1.DR.", on_click=apply_prefix, args=("A1.DR.",), use_con
 prefix_cols[2].button("A1.PL.", on_click=apply_prefix, args=("A1.PL.",), use_container_width=True)
 prefix_cols[3].button("CR.FR.", on_click=apply_prefix, args=("CR.FR.",), use_container_width=True)
 
-# Location Input Box linked to session_state
+# Location Input Box
 new_location = st.text_input("Location 1", key=input_key).strip().upper()
 
 st.markdown("---")
