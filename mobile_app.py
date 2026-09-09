@@ -8,16 +8,17 @@ st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 0.5rem; padding-bottom: 0.5rem; padding-left: 0.5rem; padding-right: 0.5rem; }
-    div[data-testid="stVerticalBlock"] > div { gap: 0.3rem; }
+    .block-container { padding-top: 0.5rem; padding-bottom: 0.5rem; padding-left: 0.4rem; padding-right: 0.4rem; }
+    div[data-testid="stVerticalBlock"] > div { gap: 0.25rem; }
+    div[data-testid="column"] { padding: 0px 2px !important; }
     h1 { font-size: 1.2rem !important; margin-bottom: 0.1rem !important; }
     h2 { font-size: 1.05rem !important; margin-bottom: 0.1rem !important; }
     h3 { font-size: 0.9rem !important; margin-bottom: 0.1rem !important; }
-    .stButton button { padding: 0.2rem 0.4rem !important; font-size: 0.85rem !important; height: auto !important; }
-    .stTextInput input { padding: 0.2rem 0.4rem !important; font-size: 0.85rem !important; }
-    .stSelectbox div[data-baseweb="select"] { min-height: 28px !important; }
+    .stButton button { padding: 0.15rem 0.35rem !important; font-size: 0.8rem !important; height: auto !important; }
+    .stTextInput input { padding: 0.15rem 0.35rem !important; font-size: 0.8rem !important; }
+    .stSelectbox div[data-baseweb="select"] { min-height: 26px !important; font-size: 0.8rem !important; }
     hr { margin: 0.3rem 0 !important; }
-    .stCaption { font-size: 0.75rem !important; margin-bottom: 0px !important; }
+    .stCaption { font-size: 0.72rem !important; margin-bottom: 0px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -126,9 +127,6 @@ if app_mode == "Item-by-Item Mode":
         placeholder="e.g., 1234 or Paracetamol"
     ).strip().upper()
 
-    # Filtering logic:
-    # 1. If user typed exactly 4 digits -> filter strictly by last 4 digits of item_code
-    # 2. Otherwise -> filter if term is anywhere in item_code or description
     if search_term:
         if len(search_term) == 4 and search_term.isdigit():
             filtered_items = [itm for itm in items if itm["item_code"].endswith(search_term)]
@@ -146,7 +144,6 @@ if app_mode == "Item-by-Item Mode":
         desc = itm["description"]
         last_4 = code[-4:] if len(code) >= 4 else code
         label = f"[{last_4}] {code} — {desc}"
-        # Store original index from global items list
         item_options[label] = items.index(itm)
 
     if not item_options:
@@ -186,31 +183,29 @@ if app_mode == "Item-by-Item Mode":
         st.info("No location assigned yet.")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    st.caption("➕ **Configure & Add Location:**")
+    st.caption("➕ **Configure Location (Linear):**")
 
-    c_area, c_type = st.columns(2)
-    area_val = c_area.selectbox("Area:", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
-    loc_type = c_type.selectbox("Type:", ["DR (Drawer)", "SH (Shelf)", "FR (Fridge)"], key=f"item_type_{st.session_state.current_index}")
+    # Linear Horizontal Controls for Item-by-Item Mode
+    col_a, col_t, col_s1, col_s2 = st.columns([1, 1.2, 1.2, 1.2])
+    area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
+    loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}")
 
-    if "DR" in loc_type:
-        c_s1, c_s2 = st.columns(2)
-        sig1 = c_s1.selectbox("Drawer Series (Σ1):", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
-        sig2 = c_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}")
+    if loc_type == "DR":
+        sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}")
         generated_location = f"{area_val}.DR.{sig1}.{sig2}"
-    elif "SH" in loc_type:
-        c_s1, c_s2 = st.columns(2)
-        sig1 = c_s1.selectbox("Shelf Sec (Σ1):", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}")
-        sig2 = c_s2.selectbox("Level # (Σ2):", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}")
+    elif loc_type == "SH":
+        sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}")
         generated_location = f"{area_val}.SH.{sig1}.{sig2}"
     else:
-        c_s1, c_s2 = st.columns(2)
-        sig1 = c_s1.selectbox("Fridge Sec (Σ1):", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}")
-        sig2 = c_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
+        sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
         generated_location = f"{area_val}.{sig1}.01.{sig2}"
 
     c_in, c_btn = st.columns([3, 1])
     target_loc_input = c_in.text_input(
-        "Final Locator (press Enter):", 
+        "Final Locator:", 
         value=generated_location, 
         key=f"item_loc_input_{st.session_state.current_index}",
         label_visibility="collapsed"
@@ -240,29 +235,28 @@ if app_mode == "Item-by-Item Mode":
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN-FILLING MODE
+# MODE 2: BIN-FILLING MODE (COMPACT LINEAR SELECTION)
 # ==============================================================================
 else:
-    st.caption("📦 **Active Bin Configuration:**")
+    st.caption("📦 **Set Active Bin Location:**")
 
-    c_bin_area, c_bin_type = st.columns(2)
-    bin_area = c_bin_area.selectbox("Area:", ["A1", "A2", "CR", "B1"], key="bin_area_sel")
-    bin_type = c_bin_type.selectbox("Type:", ["DR (Drawer)", "SH (Shelf)", "FR (Fridge)"], key="bin_type_sel")
+    # Linear layout: Area . Type . Σ1 . Σ2 placed side-by-side in 1 row
+    col_a, col_t, col_s1, col_s2 = st.columns([1, 1.2, 1.2, 1.2])
 
-    if "DR" in bin_type:
-        cb_s1, cb_s2 = st.columns(2)
-        b_sig1 = cb_s1.selectbox("Drawer Series (Σ1):", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1")
-        b_sig2 = cb_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2")
+    bin_area = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key="bin_area_sel")
+    bin_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key="bin_type_sel")
+
+    if bin_type == "DR":
+        b_sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key="bin_sig1")
+        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key="bin_sig2")
         active_bin_gen = f"{bin_area}.DR.{b_sig1}.{b_sig2}"
-    elif "SH" in bin_type:
-        cb_s1, cb_s2 = st.columns(2)
-        b_sig1 = cb_s1.selectbox("Shelf Sec (Σ1):", ["A", "B", "C", "D", "E", "F"], key="bin_sig1")
-        b_sig2 = cb_s2.selectbox("Level # (Σ2):", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2")
+    elif bin_type == "SH":
+        b_sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key="bin_sig1")
+        b_sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key="bin_sig2")
         active_bin_gen = f"{bin_area}.SH.{b_sig1}.{b_sig2}"
     else:
-        cb_s1, cb_s2 = st.columns(2)
-        b_sig1 = cb_s1.selectbox("Fridge Sec (Σ1):", ["FR", "RA", "RB"], key="bin_sig1")
-        b_sig2 = cb_s2.selectbox("Bin # (Σ2):", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2")
+        b_sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key="bin_sig1")
+        b_sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key="bin_sig2")
         active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
 
     target_bin_location = fix_location_format(active_bin_gen)
@@ -270,7 +264,7 @@ else:
 
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # Filtering logic for Bin-Filling Mode
+    # Search and Assign Logic for Bin Mode
     def handle_assign_by_enter():
         val = st.session_state.get("bin_digit_srch", "").strip().upper()
         if val:
