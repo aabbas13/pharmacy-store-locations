@@ -8,7 +8,7 @@ st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 st.markdown("""
 <style>
-    .block-container { padding-top: 0.5rem; padding-bottom: 0.5rem; padding-left: 0.4rem; padding-right: 0.4rem; }
+    .block-container { padding-top: 0.4rem; padding-bottom: 0.5rem; padding-left: 0.4rem; padding-right: 0.4rem; }
     div[data-testid="stVerticalBlock"] > div { gap: 0.25rem; }
     div[data-testid="column"] { padding: 0px 2px !important; }
     h1 { font-size: 1.2rem !important; margin-bottom: 0.1rem !important; }
@@ -103,20 +103,32 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# WORKFLOW MODE SELECTOR
-app_mode = st.radio(
-    "Mode:",
-    ["Item-by-Item Mode", "Bin-Filling Mode"],
-    horizontal=True,
-    label_visibility="collapsed"
-)
+# ==============================================================================
+# MODE SELECTOR (TOP NAVIGATION)
+# ==============================================================================
+mode_options = ["🔍 Item Search", "📦 Bin Filling"]
+
+if hasattr(st, "segmented_control"):
+    app_mode = st.segmented_control(
+        "Select Operation Mode:",
+        options=mode_options,
+        default="🔍 Item Search",
+        label_visibility="collapsed"
+    )
+else:
+    app_mode = st.radio(
+        "Select Operation Mode:",
+        options=mode_options,
+        horizontal=True,
+        label_visibility="collapsed"
+    )
 
 st.markdown("<hr/>", unsafe_allow_html=True)
 
 # ==============================================================================
-# MODE 1: ITEM-BY-ITEM
+# MODE 1: ITEM SEARCH
 # ==============================================================================
-if app_mode == "Item-by-Item Mode":
+if app_mode == "🔍 Item Search":
     if "current_index" not in st.session_state:
         st.session_state.current_index = 0
 
@@ -185,7 +197,7 @@ if app_mode == "Item-by-Item Mode":
     st.markdown("<hr/>", unsafe_allow_html=True)
     st.caption("➕ **Configure Location (Linear):**")
 
-    # Linear Horizontal Controls for Item-by-Item Mode
+    # Linear Horizontal Row: Area | Type | Series/Sec | Bin#/Level#
     col_a, col_t, col_s1, col_s2 = st.columns([1, 1.2, 1.2, 1.2])
     area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
     loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}")
@@ -235,12 +247,12 @@ if app_mode == "Item-by-Item Mode":
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN-FILLING MODE (COMPACT LINEAR SELECTION)
+# MODE 2: BIN FILLING
 # ==============================================================================
 else:
-    st.caption("📦 **Set Active Bin Location:**")
+    st.caption("📦 **Set Active Bin Location (Linear):**")
 
-    # Linear layout: Area . Type . Σ1 . Σ2 placed side-by-side in 1 row
+    # Linear Horizontal Controls (1 Row): Area . Type . Series/Sec . Bin#/Level#
     col_a, col_t, col_s1, col_s2 = st.columns([1, 1.2, 1.2, 1.2])
 
     bin_area = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key="bin_area_sel")
@@ -260,11 +272,11 @@ else:
         active_bin_gen = f"{bin_area}.{b_sig1}.01.{b_sig2}"
 
     target_bin_location = fix_location_format(active_bin_gen)
-    st.info(f"📍 Active Bin: **`{target_bin_location}`**")
+    st.info(f"📍 Active Bin Target: **`{target_bin_location}`**")
 
     st.markdown("<hr/>", unsafe_allow_html=True)
 
-    # Search and Assign Logic for Bin Mode
+    # Search & Assign Logic for Bin Mode
     def handle_assign_by_enter():
         val = st.session_state.get("bin_digit_srch", "").strip().upper()
         if val:
@@ -282,8 +294,8 @@ else:
                     st.cache_data.clear()
 
     st.text_input(
-        "Search Last 4 Digits or Medicine Name:",
-        placeholder="Type 4 digits to match end of code",
+        "Search Medicine to Add (Last 4 Digits or Name):",
+        placeholder="Type 4 digits or name",
         key="bin_digit_srch",
         on_change=handle_assign_by_enter
     )
@@ -314,7 +326,7 @@ else:
                     st.rerun()
 
     st.markdown("<hr/>", unsafe_allow_html=True)
-    st.caption(f"📋 **Meds currently in `{target_bin_location}`:**")
+    st.caption(f"📋 **Meds currently assigned to `{target_bin_location}`:**")
     current_bin_items = [itm for itm in items if target_bin_location in itm["locations"]]
 
     if not current_bin_items:
