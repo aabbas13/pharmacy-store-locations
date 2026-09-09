@@ -21,7 +21,7 @@ def get_gspread_client():
 
 try:
     gc = get_gspread_client()
-    SHEET_NAME = "HMC MCP Store Locations" # Ensure exact name matches your sheet
+    SHEET_NAME = "HMC MCP Store Locations" # Ensure exact sheet title
     sheet = gc.open(SHEET_NAME).sheet1
 except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
@@ -56,102 +56,186 @@ def load_data():
 
 items = load_data()
 
-if "current_index" not in st.session_state:
-    st.session_state.current_index = 0
-
 if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# --- SEARCH FEATURE (Last 4 Digits / Full Code / Description) ---
-st.subheader("🔍 Search Medicine")
-
-# Create lookup options mapping string formats to index
-item_options = {}
-for idx, itm in enumerate(items):
-    code = itm["item_code"]
-    desc = itm["description"]
-    last_4 = code[-4:] if len(code) >= 4 else code
-    # Formatted display label: [Last 4] Code - Description
-    label = f"[{last_4}] {code} — {desc}"
-    item_options[label] = idx
-
-search_query = st.selectbox(
-    "Search by last 4 digits, full code, or name:",
-    options=[""] + list(item_options.keys()),
-    index=0,
-    key="search_dropdown"
+# --- APP MODE SELECTION ---
+app_mode = st.radio(
+    "Select Workflow Mode:",
+    ["Item-by-Item Mode", "Bin-Filling Mode (Set Location First)"],
+    horizontal=True
 )
 
-# Jump directly when a search item is selected
-if search_query and search_query in item_options:
-    selected_idx = item_options[search_query]
-    if st.session_state.current_index != selected_idx:
-        st.session_state.current_index = selected_idx
-        st.rerun()
-
 st.markdown("---")
 
-current_item = items[st.session_state.current_index]
+# ==============================================================================
+# MODE 1: ITEM-BY-ITEM (SEQUENTIAL / SEARCH MODE)
+# ==============================================================================
+if app_mode == "Item-by-Item Mode":
+    if "current_index" not in st.session_state:
+        st.session_state.current_index = 0
 
-# Initialize input field in session_state if changing item
-input_key = f"loc_input_{st.session_state.current_index}"
-if input_key not in st.session_state:
-    initial_val = current_item["locations"][0] if current_item["locations"] else ""
-    st.session_state[input_key] = initial_val
+    st.subheader("🔍 Search Medicine")
+    item_options = {}
+    for idx, itm in enumerate(items):
+        code = itm["item_code"]
+        desc = itm["description"]
+        last_4 = code[-4:] if len(code) >= 4 else code
+        label = f"[{last_4}] {code} — {desc}"
+        item_options[label] = idx
 
-# Helper to prepend or replace prefix in session_state
-def apply_prefix(prefix):
-    curr_text = st.session_state.get(input_key, "")
-    known_prefixes = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
-    for p in known_prefixes:
-        if curr_text.startswith(p):
-            curr_text = curr_text[len(p):]
-            break
-    st.session_state[input_key] = prefix + curr_text
+    search_query = st.selectbox(
+        "Search by last 4 digits, full code, or name:",
+        options=[""] + list(item_options.keys()),
+        index=0,
+        key="search_dropdown"
+    )
 
-# UI Header
-st.caption(f"Medication {st.session_state.current_index + 1} of {len(items)}")
-st.title(current_item["description"])
+    if search_query and search_query in item_options:
+        selected_idx = item_options[search_query]
+        if st.session_state.current_index != selected_idx:
+            st.session_state.current_index = selected_idx
+            st.rerun()
 
-col1, col2 = st.columns(2)
-with col1:
-    st.write(f"**Item Code:** `{current_item['item_code']}`")
-    st.write(f"**Sub Inventory:** `{current_item['sub_inv']}`")
-with col2:
-    st.write(f"**UOM:** `{current_item['uom']}`")
+    st.markdown("---")
+    current_item = items[st.session_state.current_index]
 
-st.markdown("---")
-st.subheader("Oracle Locators")
+    input_key = f"loc_input_{st.session_state.current_index}"
+    if input_key not in st.session_state:
+        initial_val = current_item["locations"][0] if current_item["locations"] else ""
+        st.session_state[input_key] = initial_val
 
-# Prefix Quick Insert Buttons
-st.write("**Quick Prefixes:**")
-prefix_cols = st.columns(4)
-prefix_cols[0].button("A1.SH.", on_click=apply_prefix, args=("A1.SH.",), use_container_width=True)
-prefix_cols[1].button("A1.DR.", on_click=apply_prefix, args=("A1.DR.",), use_container_width=True)
-prefix_cols[2].button("A1.PL.", on_click=apply_prefix, args=("A1.PL.",), use_container_width=True)
-prefix_cols[3].button("CR.FR.", on_click=apply_prefix, args=("CR.FR.",), use_container_width=True)
+    def apply_prefix(prefix):
+        curr_text = st.session_state.get(input_key, "")
+        known_prefixes = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
+        for p in known_prefixes:
+            if curr_text.startswith(p):
+                curr_text = curr_text[len(p):]
+                break
+        st.session_state[input_key] = prefix + curr_text
 
-# Location Input Box
-new_location = st.text_input("Location 1", key=input_key).strip().upper()
+    st.caption(f"Medication {st.session_state.current_index + 1} of {len(items)}")
+    st.title(current_item["description"])
 
-st.markdown("---")
-btn_col1, btn_col2 = st.columns(2)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Item Code:** `{current_item['item_code']}`")
+        st.write(f"**Sub Inventory:** `{current_item['sub_inv']}`")
+    with col2:
+        st.write(f"**UOM:** `{current_item['uom']}`")
 
-if btn_col1.button("⬅️ Previous", use_container_width=True):
-    if st.session_state.current_index > 0:
-        st.session_state.current_index -= 1
-        st.rerun()
+    st.markdown("---")
+    st.subheader("Oracle Locators")
 
-if btn_col2.button("Save & Next ➡️", type="primary", use_container_width=True):
-    row_idx = current_item["row_indices"][0]
-    sheet.update_cell(row_idx, 5, new_location) # Column 5 = Location
-    
-    st.toast(f"Saved: {new_location}", icon="✅")
-    
-    st.cache_data.clear()
-    if st.session_state.current_index < len(items) - 1:
-        st.session_state.current_index += 1
-        st.rerun()
+    st.write("**Quick Prefixes:**")
+    prefix_cols = st.columns(4)
+    prefix_cols[0].button("A1.SH.", on_click=apply_prefix, args=("A1.SH.",), key="p1", use_container_width=True)
+    prefix_cols[1].button("A1.DR.", on_click=apply_prefix, args=("A1.DR.",), key="p2", use_container_width=True)
+    prefix_cols[2].button("A1.PL.", on_click=apply_prefix, args=("A1.PL.",), key="p3", use_container_width=True)
+    prefix_cols[3].button("CR.FR.", on_click=apply_prefix, args=("CR.FR.",), key="p4", use_container_width=True)
+
+    new_location = st.text_input("Location 1", key=input_key).strip().upper()
+
+    st.markdown("---")
+    btn_col1, btn_col2 = st.columns(2)
+
+    if btn_col1.button("⬅️ Previous", use_container_width=True):
+        if st.session_state.current_index > 0:
+            st.session_state.current_index -= 1
+            st.rerun()
+
+    if btn_col2.button("Save & Next ➡️", type="primary", use_container_width=True):
+        row_idx = current_item["row_indices"][0]
+        sheet.update_cell(row_idx, 5, new_location)
+        st.toast(f"Saved: {new_location}", icon="✅")
+        st.cache_data.clear()
+        if st.session_state.current_index < len(items) - 1:
+            st.session_state.current_index += 1
+            st.rerun()
+        else:
+            st.success("All items completed!")
+
+# ==============================================================================
+# MODE 2: BIN-FILLING MODE (SET LOCATION FIRST -> ADD MEDS BY LAST 4 DIGITS)
+# ==============================================================================
+else:
+    st.subheader("📦 Bin-Filling Mode")
+    st.caption("Select a storage locator first, then add medications into it using their last 4 digits.")
+
+    # Location Input & Prefixes
+    if "bin_location" not in st.session_state:
+        st.session_state.bin_location = ""
+
+    def apply_bin_prefix(prefix):
+        curr = st.session_state.bin_location
+        known = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
+        for p in known:
+            if curr.startswith(p):
+                curr = curr[len(p):]
+                break
+        st.session_state.bin_location = prefix + curr
+
+    st.write("**Quick Prefixes for Target Bin:**")
+    bp_cols = st.columns(4)
+    bp_cols[0].button("A1.SH.", on_click=apply_bin_prefix, args=("A1.SH.",), key="bp1", use_container_width=True)
+    bp_cols[1].button("A1.DR.", on_click=apply_bin_prefix, args=("A1.DR.",), key="bp2", use_container_width=True)
+    bp_cols[2].button("A1.PL.", on_click=apply_bin_prefix, args=("A1.PL.",), key="bp3", use_container_width=True)
+    bp_cols[3].button("CR.FR.", on_click=apply_bin_prefix, args=("CR.FR.",), key="bp4", use_container_width=True)
+
+    target_location = st.text_input(
+        "Active Location / Bin Locator:",
+        key="bin_location",
+        placeholder="e.g., A1.SH.A.01"
+    ).strip().upper()
+
+    if not target_location:
+        st.info("👆 Please enter or select a location above to begin adding meds.")
     else:
-        st.success("All items completed!")
+        st.success(f"📍 Active Bin: **{target_location}**")
+        st.markdown("---")
+
+        # Quick Add Input by 4 Digits
+        st.write("### Add Medication to Bin")
+        digit_input = st.text_input("Enter Last 4 Digits of Item Code:", max_chars=10, key="digit_search_input").strip()
+
+        # Find matching items by last 4 digits
+        matched_items = []
+        if digit_input:
+            matched_items = [
+                itm for itm in items 
+                if itm["item_code"].endswith(digit_input) or digit_input in itm["item_code"]
+            ]
+
+        if digit_input and not matched_items:
+            st.error(f"No medication found matching code containing '{digit_input}'")
+        elif matched_items:
+            st.write(f"**Found {len(matched_items)} match(es):**")
+            for m in matched_items:
+                m_code = m["item_code"]
+                m_desc = m["description"]
+                m_curr_loc = m["locations"][0] if m["locations"] else "None"
+                
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    st.write(f"**{m_desc}**")
+                    st.caption(f"Code: `{m_code}` | Current Location: `{m_curr_loc}`")
+                with c2:
+                    if st.button("➕ Assign", key=f"assign_{m_code}", type="primary", use_container_width=True):
+                        # Update Google Sheet
+                        row_idx = m["row_indices"][0]
+                        sheet.update_cell(row_idx, 5, target_location)
+                        st.toast(f"Assigned {m_code} to {target_location}!", icon="✅")
+                        st.cache_data.clear()
+                        st.rerun()
+
+        # Display all items currently in this bin
+        st.markdown("---")
+        st.write(f"### 📋 Medications currently in `{target_location}`:")
+        current_bin_items = [itm for itm in items if target_location in itm["locations"]]
+
+        if not current_bin_items:
+            st.caption("No medications are assigned to this location yet.")
+        else:
+            for idx, b_item in enumerate(current_bin_items, start=1):
+                st.write(f"{idx}. **{b_item['description']}** (`{b_item['item_code']}`)")
