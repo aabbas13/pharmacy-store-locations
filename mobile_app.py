@@ -2,7 +2,6 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-# Set up page config for mobile views
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 SCOPES = [
@@ -12,7 +11,6 @@ SCOPES = [
 
 @st.cache_resource
 def get_gspread_client():
-    # Read credentials from Streamlit Secrets in Cloud
     if "gcp_service_account" in st.secrets:
         creds_dict = dict(st.secrets["gcp_service_account"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -21,32 +19,25 @@ def get_gspread_client():
         st.error("Missing [gcp_service_account] in Streamlit Secrets!")
         st.stop()
 
-# Initialize Google Sheet
 try:
     gc = get_gspread_client()
-    # Replace with the EXACT title of your Google Sheet
-    SHEET_NAME = "HMC MCP Store Locations" 
+    SHEET_NAME = "HMC MCP Store Locations" # Ensure exact name
     sheet = gc.open(SHEET_NAME).sheet1
 except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
     st.stop()
 
-# Load Data
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_data():
     records = sheet.get_all_records()
     items_dict = {}
-    all_locations = set()
 
-    for row_idx, row in enumerate(records, start=2): # Start at row 2 (row 1 is headers)
-        code = str(row.get('Item Code', ''))
-        desc = str(row.get('Item Description', ''))
-        uom = str(row.get('UOM', ''))
-        sub_inv = str(row.get('Sub Inventory', ''))
+    for row_idx, row in enumerate(records, start=2):
+        code = str(row.get('Item Code', '')).strip()
+        desc = str(row.get('Item Description', '')).strip()
+        uom = str(row.get('UOM', '')).strip()
+        sub_inv = str(row.get('Sub Inventory', '')).strip()
         loc = str(row.get('Location', '')).strip()
-
-        if loc:
-            all_locations.add(loc)
 
         if code not in items_dict:
             items_dict[code] = {
@@ -61,11 +52,10 @@ def load_data():
             items_dict[code]["locations"].append(loc)
         items_dict[code]["row_indices"].append(row_idx)
 
-    return list(items_dict.values()), sorted(list(all_locations))
+    return list(items_dict.values())
 
-items, global_locations = load_data()
+items = load_data()
 
-# Navigation state
 if "current_index" not in st.session_state:
     st.session_state.current_index = 0
 
@@ -75,7 +65,24 @@ if not items:
 
 current_item = items[st.session_state.current_index]
 
-# UI Layout
+# Initialize input field in session_state if changing item
+input_key = f"loc_input_{st.session_state.current_index}"
+if input_key not in st.session_state:
+    initial_val = current_item["locations"][0] if current_item["locations"] else ""
+    st.session_state[input_key] = initial_val
+
+# Helper to prepend or replace prefix in session_state
+def apply_prefix(prefix):
+    curr_text = st.session_state.get(input_key, "")
+    # If text already starts with a recognized prefix, swap it out
+    known_prefixes = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
+    for p in known_prefixes:
+        if curr_text.startswith(p):
+            curr_text = curr_text[len(p):]
+            break
+    st.session_state[input_key] = prefix + curr_text
+
+# UI Header
 st.caption(f"Medication {st.session_state.current_index + 1} of {len(items)}")
 st.title(current_item["description"])
 
@@ -89,23 +96,17 @@ with col2:
 st.markdown("---")
 st.subheader("Oracle Locators")
 
-# Prefix Quick Insert Buttons
+# Prefix Quick Insert Buttons using On-Click Callbacks
 st.write("**Quick Prefixes:**")
 prefix_cols = st.columns(4)
-selected_prefix = ""
-if prefix_cols[0].button("A1.SH."): selected_prefix = "A1.SH."
-if prefix_cols[1].button("A1.DR."): selected_prefix = "A1.DR."
-if prefix_cols[2].button("A1.PL."): selected_prefix = "A1.PL."
-if prefix_cols[3].button("CR.FR."): selected_prefix = "CR.FR."
+prefix_cols[0].button("A1.SH.", on_click=apply_prefix, args=("A1.SH.",), use_container_width=True)
+prefix_cols[1].button("A1.DR.", on_click=apply_prefix, args=("A1.DR.",), use_container_width=True)
+prefix_cols[2].button("A1.PL.", on_click=apply_prefix, args=("A1.PL.",), use_container_width=True)
+prefix_cols[3].button("CR.FR.", on_click=apply_prefix, args=("CR.FR.",), use_container_width=True)
 
-# Location Inputs
-existing_loc = current_item["locations"][0] if current_item["locations"] else ""
-if selected_prefix and not existing_loc.startswith(selected_prefix):
-    existing_loc = selected_prefix + existing_loc
+# Location Input Box linked to session_state
+new_location = st.text_input("Location 1", key=input_key).strip().upper()
 
-new_location = st.text_input("Location 1", value=existing_loc, key=f"loc_{st.session_state.current_index}").strip().upper()
-
-# Navigation & Save Controls
 st.markdown("---")
 btn_col1, btn_col2 = st.columns(2)
 
@@ -115,13 +116,11 @@ if btn_col1.button("⬅️ Previous", use_container_width=True):
         st.rerun()
 
 if btn_col2.button("Save & Next ➡️", type="primary", use_container_width=True):
-    # Update Google Sheet
     row_idx = current_item["row_indices"][0]
     sheet.update_cell(row_idx, 5, new_location) # Column 5 = Location
     
-    st.toast("Updated Google Sheet successfully!", icon="✅")
+    st.toast(f"Saved: {new_location}", icon="✅")
     
-    # Clear cache and move to next
     st.cache_data.clear()
     if st.session_state.current_index < len(items) - 1:
         st.session_state.current_index += 1
