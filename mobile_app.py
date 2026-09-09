@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -27,17 +28,45 @@ except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
     st.stop()
 
+def fix_location_format(loc_str: str) -> str:
+    """
+    Auto-fixes location format to standard Oracle locator pattern (e.g., A1.SH.A.01).
+    Handles missing dots, extra spaces, and lowercase letters.
+    """
+    if not loc_str:
+        return ""
+    
+    # Capitalize and strip leading/trailing spaces
+    cleaned = loc_str.upper().strip()
+    
+    # If already matches standard pattern XX.XX.X.XX or similar, return cleaned
+    if re.match(r"^[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,2}$", cleaned):
+        return cleaned
+
+    # Attempt auto-fix for plain alphanumeric string like A1SHA01 or A1 SH A 01
+    raw_chars = re.sub(r'[^A-Z0-9]', '', cleaned)
+    
+    # Expected standard length: 7 characters (e.g., A1 SH A 01 -> A1SHA01)
+    if len(raw_chars) == 7:
+        return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:5]}.{raw_chars[5:7]}"
+    # 8 characters (e.g., CRFR0101)
+    elif len(raw_chars) == 8:
+        return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:6]}.{raw_chars[6:8]}"
+        
+    # Return cleaned if no auto-rule matched
+    return cleaned
+
 @st.cache_data(ttl=30)
 def load_data():
     records = sheet.get_all_records()
     items_dict = {}
 
     for row_idx, row in enumerate(records, start=2):
-        code = str(row.get('Item Code', '')).strip()
+        code = str(row.get('Item Code', '')).strip().upper()
         desc = str(row.get('Item Description', '')).strip()
         uom = str(row.get('UOM', '')).strip()
         sub_inv = str(row.get('Sub Inventory', '')).strip()
-        loc = str(row.get('Location', '')).strip()
+        loc = str(row.get('Location', '')).strip().upper()
 
         if code not in items_dict:
             items_dict[code] = {
@@ -107,7 +136,7 @@ if app_mode == "Item-by-Item Mode":
         st.session_state[input_key] = initial_val
 
     def apply_prefix(prefix):
-        curr_text = st.session_state.get(input_key, "")
+        curr_text = st.session_state.get(input_key, "").upper()
         known_prefixes = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
         for p in known_prefixes:
             if curr_text.startswith(p):
@@ -135,7 +164,11 @@ if app_mode == "Item-by-Item Mode":
     prefix_cols[2].button("A1.PL.", on_click=apply_prefix, args=("A1.PL.",), key="p3", use_container_width=True)
     prefix_cols[3].button("CR.FR.", on_click=apply_prefix, args=("CR.FR.",), key="p4", use_container_width=True)
 
-    new_location = st.text_input("Location 1", key=input_key).strip().upper()
+    raw_location = st.text_input("Location 1", key=input_key).strip().upper()
+    fixed_location = fix_location_format(raw_location)
+
+    if fixed_location != raw_location and raw_location:
+        st.caption(f"💡 Auto-formatted location to: `{fixed_location}`")
 
     st.markdown("---")
     btn_col1, btn_col2 = st.columns(2)
@@ -147,8 +180,8 @@ if app_mode == "Item-by-Item Mode":
 
     if btn_col2.button("Save & Next ➡️", type="primary", use_container_width=True):
         row_idx = current_item["row_indices"][0]
-        sheet.update_cell(row_idx, 5, new_location)
-        st.toast(f"Saved: {new_location}", icon="✅")
+        sheet.update_cell(row_idx, 5, fixed_location)
+        st.toast(f"Saved: {fixed_location}", icon="✅")
         st.cache_data.clear()
         if st.session_state.current_index < len(items) - 1:
             st.session_state.current_index += 1
@@ -168,7 +201,7 @@ else:
         st.session_state.bin_location = ""
 
     def apply_bin_prefix(prefix):
-        curr = st.session_state.bin_location
+        curr = st.session_state.bin_location.upper()
         known = ["A1.SH.", "A1.DR.", "A1.PL.", "CR.FR."]
         for p in known:
             if curr.startswith(p):
@@ -183,21 +216,31 @@ else:
     bp_cols[2].button("A1.PL.", on_click=apply_bin_prefix, args=("A1.PL.",), key="bp3", use_container_width=True)
     bp_cols[3].button("CR.FR.", on_click=apply_bin_prefix, args=("CR.FR.",), key="bp4", use_container_width=True)
 
-    target_location = st.text_input(
+    raw_bin_location = st.text_input(
         "Active Location / Bin Locator:",
         key="bin_location",
-        placeholder="e.g., A1.SH.A.01"
+        placeholder="e.g., A1.SH.A.01 or A1SHA01"
     ).strip().upper()
+
+    target_location = fix_location_format(raw_bin_location)
 
     if not target_location:
         st.info("👆 Please enter or select a location above to begin adding meds.")
     else:
-        st.success(f"📍 Active Bin: **{target_location}**")
+        if raw_bin_location != target_location:
+            st.info(f"📍 Active Bin (Auto-Formatted): **{target_location}**")
+        else:
+            st.success(f"📍 Active Bin: **{target_location}**")
+            
         st.markdown("---")
 
-        # Quick Add Input by 4 Digits
+        # Quick Add Input by 4 Digits (auto-capitalized)
         st.write("### Add Medication to Bin")
-        digit_input = st.text_input("Enter Last 4 Digits of Item Code:", max_chars=10, key="digit_search_input").strip()
+        digit_input = st.text_input(
+            "Enter Last 4 Digits of Item Code:", 
+            max_chars=10, 
+            key="digit_search_input"
+        ).strip().upper()
 
         # Find matching items by last 4 digits
         matched_items = []
@@ -244,7 +287,6 @@ else:
                 with col_unassign:
                     if st.button("❌ Unassign", key=f"unassign_{b_item['item_code']}_{idx}", use_container_width=True):
                         row_idx = b_item["row_indices"][0]
-                        # Set cell in Column 5 to empty string
                         sheet.update_cell(row_idx, 5, "")
                         st.toast(f"Unassigned {b_item['item_code']} from {target_location}", icon="🗑️")
                         st.cache_data.clear()
