@@ -19,6 +19,15 @@ st.markdown("""
     .stSelectbox div[data-baseweb="select"] { min-height: 26px !important; font-size: 0.8rem !important; }
     hr { margin: 0.3rem 0 !important; }
     .stCaption { font-size: 0.72rem !important; margin-bottom: 0px !important; }
+    
+    /* Prominent Radio Buttons for Mode Selection */
+    div[role="radiogroup"] {
+        background-color: #f0f2f6;
+        padding: 4px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-around;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -104,31 +113,21 @@ if not items:
     st.stop()
 
 # ==============================================================================
-# MODE SELECTOR (TOP NAVIGATION)
+# PROMINENT MODE SELECTOR AT THE TOP
 # ==============================================================================
-mode_options = ["🔍 Item Search", "📦 Bin Filling"]
-
-if hasattr(st, "segmented_control"):
-    app_mode = st.segmented_control(
-        "Select Operation Mode:",
-        options=mode_options,
-        default="🔍 Item Search",
-        label_visibility="collapsed"
-    )
-else:
-    app_mode = st.radio(
-        "Select Operation Mode:",
-        options=mode_options,
-        horizontal=True,
-        label_visibility="collapsed"
-    )
+app_mode = st.radio(
+    "Select Mode:",
+    options=["🔍 Item Search Mode", "📦 Bin Filling Mode"],
+    horizontal=True,
+    key="global_app_mode_toggle"
+)
 
 st.markdown("<hr/>", unsafe_allow_html=True)
 
 # ==============================================================================
-# MODE 1: ITEM SEARCH
+# MODE 1: ITEM SEARCH MODE
 # ==============================================================================
-if app_mode == "🔍 Item Search":
+if app_mode == "🔍 Item Search Mode":
     if "current_index" not in st.session_state:
         st.session_state.current_index = 0
 
@@ -247,7 +246,7 @@ if app_mode == "🔍 Item Search":
         st.rerun()
 
 # ==============================================================================
-# MODE 2: BIN FILLING
+# MODE 2: BIN FILLING MODE
 # ==============================================================================
 else:
     st.caption("📦 **Set Active Bin Location (Linear):**")
