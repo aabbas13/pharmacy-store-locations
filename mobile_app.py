@@ -301,6 +301,7 @@ else:
     st.subheader("📦 Bin Filling Mode")
 
     p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
+    p_bounds = persisted_data.get("vertical_bounds", {"start": "AA", "max": "AO"})
 
     # Direct integration to widget keys to avoid variable mismatch
     if "bin_area_in" not in st.session_state:
@@ -314,20 +315,19 @@ else:
     if "focus_item_search" not in st.session_state:
         st.session_state.focus_item_search = False
 
-    with st.expander("⚙️ Location Bounds Config (Sigma 3 & 4)", expanded=False):
+    with st.expander("⚙️ Vertical Navigation Bounds", expanded=False):
         c_conf1, c_conf2 = st.columns(2)
-        sig3_code = c_conf1.text_input("Sigma 3 (e.g. AA = Cabinet A, Row A)", value="AA").strip().upper()
-        max_sig4 = c_conf2.number_input("Max Sigma 4 (Columns/Bins)", min_value=1, max_value=99, value=30, step=1)
+        start_row = c_conf1.text_input("Start Row (Top)", value=p_bounds.get("start", "AA")).strip().upper()
+        max_row = c_conf2.text_input("Max Row (Bottom)", value=p_bounds.get("max", "AO")).strip().upper()
+        # Save these bounds for the next session
+        save_persistent_state({"vertical_bounds": {"start": start_row, "max": max_row}})
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
-    
-    sig1_label = f"Sigma 3 ({sig3_code})*" if sig3_code else "Series*"
-    sig2_label = "Sigma 4 (Col#)*"
 
     in_area = col_a.text_input("Area*", key="bin_area_in").strip().upper()
     in_type = col_t.text_input("Type*", key="bin_type_in").strip().upper()
-    in_sig1 = col_s1.text_input(sig1_label, key="bin_sig1_in").strip().upper()
-    in_sig2 = col_s2.text_input(sig2_label, key="bin_sig2_in").strip().upper()
+    in_sig1 = col_s1.text_input("Sigma 3 (Row)*", key="bin_sig1_in").strip().upper()
+    in_sig2 = col_s2.text_input("Sigma 4 (Col#)*", key="bin_sig2_in").strip().upper()
 
     all_fields_filled = all([in_area, in_type, in_sig1, in_sig2])
 
@@ -346,37 +346,35 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
-    def advance_bin():
-        try:
-            curr_num = int(st.session_state.bin_sig2_in)
-            if curr_num < max_sig4:
+    def advance_vertical():
+        curr_row = st.session_state.bin_sig1_in.strip().upper()
+        curr_col = st.session_state.bin_sig2_in.strip()
+        
+        # If we have reached the defined maximum row, wrap around to next column
+        if curr_row == max_row:
+            st.session_state.bin_sig1_in = start_row
+            try:
+                curr_num = int(curr_col)
                 st.session_state.bin_sig2_in = f"{curr_num + 1:02d}"
-                st.session_state.focus_item_search = True
-            else:
-                st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
-        except ValueError:
-            st.error("Sigma 4 must be numeric to increment.")
-
-    def advance_drawer():
-        curr_sig1 = st.session_state.bin_sig1_in.strip().upper()
-        if len(curr_sig1) == 2:
-            first_char, second_char = curr_sig1[0], curr_sig1[1]
-            if second_char < 'Z':
-                next_sig1 = first_char + chr(ord(second_char) + 1)
-            else:
-                next_sig1 = chr(ord(first_char) + 1) + 'A'
-            st.session_state.bin_sig1_in = next_sig1
-            st.session_state.bin_sig2_in = "01"
-            st.session_state.focus_item_search = True
-        elif len(curr_sig1) == 1:
-            st.session_state.bin_sig1_in = chr(ord(curr_sig1) + 1)
-            st.session_state.bin_sig2_in = "01"
-            st.session_state.focus_item_search = True
+            except ValueError:
+                pass # Keep as is if not a number
+        else:
+            # Increment row downwards
+            if len(curr_row) == 2:
+                first_char, second_char = curr_row[0], curr_row[1]
+                if second_char < 'Z':
+                    next_row = first_char + chr(ord(second_char) + 1)
+                else:
+                    next_row = chr(ord(first_char) + 1) + 'A'
+                st.session_state.bin_sig1_in = next_row
+            elif len(curr_row) == 1:
+                st.session_state.bin_sig1_in = chr(ord(curr_row) + 1)
+                
+        # Always refocus the item search box after navigating
+        st.session_state.focus_item_search = True
 
     if all_fields_filled:
-        col_next1, col_next2 = st.columns(2)
-        col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True, on_click=advance_bin)
-        col_next2.button("📑 Next Drawer / Row", use_container_width=True, on_click=advance_drawer)
+        st.button("⬇️ Next Vertical Location (Row ↓, then Col →)", use_container_width=True, on_click=advance_vertical)
 
     st.divider()
 
