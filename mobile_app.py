@@ -302,14 +302,15 @@ else:
 
     p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
 
-    if "bin_area_val" not in st.session_state:
-        st.session_state.bin_area_val = p_bin.get("area", "A1")
-    if "bin_type_val" not in st.session_state:
-        st.session_state.bin_type_val = p_bin.get("type", "DR")
-    if "bin_sig1_val" not in st.session_state:
-        st.session_state.bin_sig1_val = p_bin.get("sig1", "")
-    if "bin_sig2_val" not in st.session_state:
-        st.session_state.bin_sig2_val = p_bin.get("sig2", "")
+    # Direct integration to widget keys to avoid variable mismatch
+    if "bin_area_in" not in st.session_state:
+        st.session_state.bin_area_in = p_bin.get("area", "A1")
+    if "bin_type_in" not in st.session_state:
+        st.session_state.bin_type_in = p_bin.get("type", "DR")
+    if "bin_sig1_in" not in st.session_state:
+        st.session_state.bin_sig1_in = p_bin.get("sig1", "")
+    if "bin_sig2_in" not in st.session_state:
+        st.session_state.bin_sig2_in = p_bin.get("sig2", "")
     if "focus_item_search" not in st.session_state:
         st.session_state.focus_item_search = False
 
@@ -319,20 +320,14 @@ else:
         max_sig4 = c_conf2.number_input("Max Sigma 4 (Columns/Bins)", min_value=1, max_value=99, value=30, step=1)
 
     col_a, col_t, col_s1, col_s2 = st.columns(4)
-
-    in_area = col_a.text_input("Area*", value=st.session_state.bin_area_val, key="bin_area_in").strip().upper()
-    in_type = col_t.text_input("Type*", value=st.session_state.bin_type_val, key="bin_type_in").strip().upper()
     
     sig1_label = f"Sigma 3 ({sig3_code})*" if sig3_code else "Series*"
     sig2_label = "Sigma 4 (Col#)*"
 
-    in_sig1 = col_s1.text_input(sig1_label, value=st.session_state.bin_sig1_val, key="bin_sig1_in").strip().upper()
-    in_sig2 = col_s2.text_input(sig2_label, value=st.session_state.bin_sig2_val, key="bin_sig2_in").strip().upper()
-
-    st.session_state.bin_area_val = in_area
-    st.session_state.bin_type_val = in_type
-    st.session_state.bin_sig1_val = in_sig1
-    st.session_state.bin_sig2_val = in_sig2
+    in_area = col_a.text_input("Area*", key="bin_area_in").strip().upper()
+    in_type = col_t.text_input("Type*", key="bin_type_in").strip().upper()
+    in_sig1 = col_s1.text_input(sig1_label, key="bin_sig1_in").strip().upper()
+    in_sig2 = col_s2.text_input(sig2_label, key="bin_sig2_in").strip().upper()
 
     all_fields_filled = all([in_area, in_type, in_sig1, in_sig2])
 
@@ -353,9 +348,9 @@ else:
 
     def advance_bin():
         try:
-            curr_num = int(st.session_state.bin_sig2_val)
+            curr_num = int(st.session_state.bin_sig2_in)
             if curr_num < max_sig4:
-                st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
+                st.session_state.bin_sig2_in = f"{curr_num + 1:02d}"
                 st.session_state.focus_item_search = True
             else:
                 st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
@@ -363,12 +358,19 @@ else:
             st.error("Sigma 4 must be numeric to increment.")
 
     def advance_drawer():
-        curr_sig1 = st.session_state.bin_sig1_val
+        curr_sig1 = st.session_state.bin_sig1_in.strip().upper()
         if len(curr_sig1) == 2:
             first_char, second_char = curr_sig1[0], curr_sig1[1]
-            next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
-            st.session_state.bin_sig1_val = next_sig1
-            st.session_state.bin_sig2_val = "01"
+            if second_char < 'Z':
+                next_sig1 = first_char + chr(ord(second_char) + 1)
+            else:
+                next_sig1 = chr(ord(first_char) + 1) + 'A'
+            st.session_state.bin_sig1_in = next_sig1
+            st.session_state.bin_sig2_in = "01"
+            st.session_state.focus_item_search = True
+        elif len(curr_sig1) == 1:
+            st.session_state.bin_sig1_in = chr(ord(curr_sig1) + 1)
+            st.session_state.bin_sig2_in = "01"
             st.session_state.focus_item_search = True
 
     if all_fields_filled:
