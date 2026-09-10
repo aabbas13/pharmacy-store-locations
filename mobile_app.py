@@ -417,7 +417,7 @@ else:
     js_code = f"""
     <!DOCTYPE html>
     <html>
-      <body>
+      <body style="margin:0;padding:0;">
         <script>
           const shouldFocus = {should_focus};
           if (shouldFocus) {{
@@ -437,7 +437,7 @@ else:
     </html>
     """
     data_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(js_code)}"
-    st.iframe(src=data_url, height=0)
+    st.iframe(src=data_url, height=1)
     st.session_state.focus_item_search = False
 
     search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
