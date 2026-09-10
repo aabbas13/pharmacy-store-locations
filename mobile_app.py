@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import urllib.parse
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -194,17 +195,14 @@ if app_mode == "🔍 Item Search":
     if not item_options:
         st.warning("No matching items found.")
     else:
-        # Callback to update selection dropdown state safely
         def on_dropdown_select():
             selected_str = st.session_state.search_dropdown
             if selected_str in item_options:
                 st.session_state.current_index = item_options[selected_str]
                 save_persistent_state({"last_item_index": st.session_state.current_index})
 
-        # Ensure index stays within boundary limits
         st.session_state.current_index = max(0, min(st.session_state.current_index, len(items) - 1))
 
-        # Find matching label for active index or fallback to first option
         current_item_obj = items[st.session_state.current_index]
         current_label = next((lbl for lbl, idx in item_options.items() if idx == st.session_state.current_index), list(item_options.keys())[0])
         dropdown_idx = list(item_options.keys()).index(current_label)
@@ -282,7 +280,6 @@ if app_mode == "🔍 Item Search":
 
     st.divider()
     
-    # Navigation Callbacks
     def prev_item():
         if st.session_state.current_index > 0:
             st.session_state.current_index -= 1
@@ -354,7 +351,6 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
-    # Callbacks for Bin Filling Navigation Buttons
     def advance_bin():
         try:
             curr_num = int(st.session_state.bin_sig2_val)
@@ -418,26 +414,30 @@ else:
     )
 
     should_focus = "true" if st.session_state.focus_item_search else "false"
-    st.components.v1.html(
-        f"""
+    js_code = f"""
+    <!DOCTYPE html>
+    <html>
+      <body>
         <script>
-        const shouldFocus = {should_focus};
-        if (shouldFocus) {{
-            const doc = window.parent.document;
-            setTimeout(() => {{
-                const inputs = doc.querySelectorAll('input[type="text"]');
-                inputs.forEach(input => {{
-                    if (input.placeholder && input.placeholder.includes("E.G. 1234")) {{
-                        input.focus();
-                        input.select();
-                    }}
-                }});
-            }}, 150);
-        }}
+          const shouldFocus = {should_focus};
+          if (shouldFocus) {{
+              const doc = window.parent.document;
+              setTimeout(() => {{
+                  const inputs = doc.querySelectorAll('input[type="text"]');
+                  inputs.forEach(input => {{
+                      if (input.placeholder && input.placeholder.includes("E.G. 1234")) {{
+                          input.focus();
+                          input.select();
+                      }}
+                  }});
+              }}, 150);
+          }}
         </script>
-        """,
-        height=0
-    )
+      </body>
+    </html>
+    """
+    data_url = f"data:text/html;charset=utf-8,{urllib.parse.quote(js_code)}"
+    st.iframe(src=data_url, height=0)
     st.session_state.focus_item_search = False
 
     search_val = st.session_state.get("bin_digit_srch", "").strip().upper()
