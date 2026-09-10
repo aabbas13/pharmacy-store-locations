@@ -317,15 +317,8 @@ else:
 
     with st.expander("⚙️ Vertical Navigation Bounds", expanded=False):
         c_conf1, c_conf2 = st.columns(2)
-        start_row = c_conf1.text_input(
-            "Start Row (Top)",
-            value=p_bounds.get("start", "AA"),
-            help="Defines the row FORMAT. E.g. 'AA' = 2-char alphabetical (prefix 'A' fixed, row identifier is the 2nd letter, starting at 'A'). 'A' = 1-char alphabetical. '01' = 2-digit numeric."
-        ).strip().upper()
-        max_row = c_conf2.text_input(
-            "Max Row (Bottom)",
-            value=p_bounds.get("max", "AO")).strip().upper()
-        st.caption("Max Row can be the full row (e.g. 'AO') or just the row identifier (e.g. 'O'). Only the row identifier (the last character/digits) is used as the limit — the prefix is never auto-incremented.")
+        start_row = c_conf1.text_input("Start Row (Top)", value=p_bounds.get("start", "AA")).strip().upper()
+        max_row = c_conf2.text_input("Max Row (Bottom)", value=p_bounds.get("max", "AO")).strip().upper()
         # Save these bounds for the next session
         save_persistent_state({"vertical_bounds": {"start": start_row, "max": max_row}})
 
@@ -353,71 +346,30 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
-    def get_row_format(fmt_start_row: str, fmt_max_row: str) -> dict:
-        """
-        The Starting Row defines the FORMAT of the row (numeric vs alphabetical,
-        and whether there's a fixed prefix). The row identifier that actually
-        increments is always the LAST character/digit(s):
-          - "AA" -> prefix "A" (fixed, never auto-increments), identifier "A".."Z"
-          - "A"  -> no prefix, identifier "A".."Z"
-          - "01" -> no prefix, numeric identifier, 2-digit zero padded
-        Max Row may be given as the full row (e.g. "AO") or just the identifier
-        (e.g. "O") - only its last character/digits are used as the limit.
-        """
-        if fmt_start_row.isdigit():
-            pad_len = len(fmt_start_row)
-            start_val = int(fmt_start_row)
-            digits = ''.join(ch for ch in fmt_max_row if ch.isdigit())
-            max_val = int(digits) if digits else start_val
-            return {"numeric": True, "pad_len": pad_len, "start_val": start_val, "max_val": max_val}
-        else:
-            prefix = fmt_start_row[:-1] if len(fmt_start_row) >= 2 else ""
-            start_char = fmt_start_row[-1] if fmt_start_row else "A"
-            max_char = fmt_max_row[-1] if fmt_max_row else start_char
-            return {"numeric": False, "prefix": prefix, "start_char": start_char, "max_char": max_char}
-
     def advance_vertical():
         curr_row = st.session_state.bin_sig1_in.strip().upper()
         curr_col = st.session_state.bin_sig2_in.strip()
-        fmt = get_row_format(start_row, max_row)
-
-        bump_col = False
-
-        if fmt["numeric"]:
-            try:
-                curr_val = int(curr_row)
-            except ValueError:
-                curr_val = fmt["start_val"]
-
-            if curr_val >= fmt["max_val"]:
-                new_row = str(fmt["start_val"]).zfill(fmt["pad_len"])
-                bump_col = True
-            else:
-                new_row = str(curr_val + 1).zfill(fmt["pad_len"])
-        else:
-            # The prefix (if any) is fixed and preserved as-is; only the last
-            # character (the row identifier) ever increments or wraps.
-            if len(curr_row) >= 2:
-                curr_prefix, curr_char = curr_row[:-1], curr_row[-1]
-            else:
-                curr_prefix, curr_char = "", (curr_row or fmt["start_char"])
-
-            if curr_char >= fmt["max_char"]:
-                new_row = curr_prefix + fmt["start_char"]
-                bump_col = True
-            else:
-                new_row = curr_prefix + chr(ord(curr_char) + 1)
-
-        st.session_state.bin_sig1_in = new_row
-
-        # If we wrapped past the max row, advance to the next column
-        if bump_col:
+        
+        # If we have reached the defined maximum row, wrap around to next column
+        if curr_row == max_row:
+            st.session_state.bin_sig1_in = start_row
             try:
                 curr_num = int(curr_col)
                 st.session_state.bin_sig2_in = f"{curr_num + 1:02d}"
             except ValueError:
-                pass  # Keep as is if not a number
-
+                pass # Keep as is if not a number
+        else:
+            # Increment row downwards
+            if len(curr_row) == 2:
+                first_char, second_char = curr_row[0], curr_row[1]
+                if second_char < 'Z':
+                    next_row = first_char + chr(ord(second_char) + 1)
+                else:
+                    next_row = chr(ord(first_char) + 1) + 'A'
+                st.session_state.bin_sig1_in = next_row
+            elif len(curr_row) == 1:
+                st.session_state.bin_sig1_in = chr(ord(curr_row) + 1)
+                
         # Always refocus the item search box after navigating
         st.session_state.focus_item_search = True
 
