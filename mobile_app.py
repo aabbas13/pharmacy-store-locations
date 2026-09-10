@@ -31,9 +31,13 @@ persisted_data = load_persistent_state()
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
+# Increased top padding to shift content down away from Streamlit's top header
 st.markdown("""
 <style>
-    .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+    .block-container { 
+        padding-top: 3.5rem !important; 
+        padding-bottom: 1rem !important; 
+    }
     div[role="radiogroup"] {
         background-color: #f0f2f6;
         padding: 4px;
@@ -68,7 +72,7 @@ try:
     SHEET_NAME = "HMC MCP Store Locations"
     spreadsheet = gc.open(SHEET_NAME)
     sheet = spreadsheet.sheet1
-    sheet_url = spreadsheet.url  # Captured for the external link button
+    sheet_url = spreadsheet.url
 except Exception as e:
     st.error(f"Error connecting to Google Sheets: {e}")
     st.stop()
