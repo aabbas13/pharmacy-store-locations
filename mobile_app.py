@@ -406,6 +406,10 @@ else:
             
             if len(matches) == 1:
                 execute_assignment(matches[0])
+            elif len(matches) == 0 and len(val) == 4 and val.isdigit():
+                st.toast(f"Item '{val}' not available in formulary!", icon="❌")
+                st.session_state["bin_digit_srch"] = ""
+                st.session_state.focus_item_search = True
 
     st.text_input(
         "Search Item to Assign (Type 4 digits or Name)",
