@@ -31,7 +31,6 @@ persisted_data = load_persistent_state()
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
-# Increased top padding to shift content down away from Streamlit's top header
 st.markdown("""
 <style>
     .block-container { 
@@ -135,7 +134,10 @@ if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
 
-# Restore mode from disk
+# --- INITIALIZE GLOBAL NAVIGATION STATE ---
+if "current_index" not in st.session_state:
+    st.session_state.current_index = persisted_data.get("last_item_index", 0)
+
 default_mode = persisted_data.get("app_mode", "🔍 Item Search")
 
 col_mode, col_sheet_btn = st.columns([3, 1])
@@ -161,9 +163,6 @@ st.divider()
 # MODE 1: ITEM SEARCH MODE
 # ==============================================================================
 if app_mode == "🔍 Item Search":
-    if "current_index" not in st.session_state:
-        st.session_state.current_index = persisted_data.get("last_item_index", 0)
-
     st.subheader("🔍 Item Search")
     
     raw_search = st.text_input(
@@ -195,18 +194,28 @@ if app_mode == "🔍 Item Search":
     if not item_options:
         st.warning("No matching items found.")
     else:
-        selected_label = st.selectbox(
+        # Callback to update selection dropdown state safely
+        def on_dropdown_select():
+            selected_str = st.session_state.search_dropdown
+            if selected_str in item_options:
+                st.session_state.current_index = item_options[selected_str]
+                save_persistent_state({"last_item_index": st.session_state.current_index})
+
+        # Ensure index stays within boundary limits
+        st.session_state.current_index = max(0, min(st.session_state.current_index, len(items) - 1))
+
+        # Find matching label for active index or fallback to first option
+        current_item_obj = items[st.session_state.current_index]
+        current_label = next((lbl for lbl, idx in item_options.items() if idx == st.session_state.current_index), list(item_options.keys())[0])
+        dropdown_idx = list(item_options.keys()).index(current_label)
+
+        st.selectbox(
             "Select Item Result",
             options=list(item_options.keys()),
-            key="search_dropdown"
+            index=dropdown_idx,
+            key="search_dropdown",
+            on_change=on_dropdown_select
         )
-
-        if selected_label in item_options:
-            selected_idx = item_options[selected_label]
-            if st.session_state.current_index != selected_idx:
-                st.session_state.current_index = selected_idx
-                save_persistent_state({"last_item_index": selected_idx})
-                st.rerun()
 
     current_item = items[st.session_state.current_index]
     save_persistent_state({"last_item_index": st.session_state.current_index})
@@ -272,15 +281,21 @@ if app_mode == "🔍 Item Search":
             st.rerun()
 
     st.divider()
+    
+    # Navigation Callbacks
+    def prev_item():
+        if st.session_state.current_index > 0:
+            st.session_state.current_index -= 1
+            save_persistent_state({"last_item_index": st.session_state.current_index})
+
+    def next_item():
+        if st.session_state.current_index < len(items) - 1:
+            st.session_state.current_index += 1
+            save_persistent_state({"last_item_index": st.session_state.current_index})
+
     b_prev, b_next = st.columns(2)
-    if b_prev.button("⬅️ Previous Item", use_container_width=True) and st.session_state.current_index > 0:
-        st.session_state.current_index -= 1
-        save_persistent_state({"last_item_index": st.session_state.current_index})
-        st.rerun()
-    if b_next.button("Next Item ➡️", use_container_width=True) and st.session_state.current_index < len(items) - 1:
-        st.session_state.current_index += 1
-        save_persistent_state({"last_item_index": st.session_state.current_index})
-        st.rerun()
+    b_prev.button("⬅️ Previous Item", use_container_width=True, on_click=prev_item, disabled=(st.session_state.current_index <= 0))
+    b_next.button("Next Item ➡️", use_container_width=True, on_click=next_item, disabled=(st.session_state.current_index >= len(items) - 1))
 
 # ==============================================================================
 # MODE 2: BIN FILLING MODE
@@ -339,28 +354,31 @@ else:
         target_bin_location = ""
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
 
+    # Callbacks for Bin Filling Navigation Buttons
+    def advance_bin():
+        try:
+            curr_num = int(st.session_state.bin_sig2_val)
+            if curr_num < max_sig4:
+                st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
+                st.session_state.focus_item_search = True
+            else:
+                st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
+        except ValueError:
+            st.error("Sigma 4 must be numeric to increment.")
+
+    def advance_drawer():
+        curr_sig1 = st.session_state.bin_sig1_val
+        if len(curr_sig1) == 2:
+            first_char, second_char = curr_sig1[0], curr_sig1[1]
+            next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
+            st.session_state.bin_sig1_val = next_sig1
+            st.session_state.bin_sig2_val = "01"
+            st.session_state.focus_item_search = True
+
     if all_fields_filled:
         col_next1, col_next2 = st.columns(2)
-        if col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True):
-            try:
-                curr_num = int(in_sig2)
-                if curr_num < max_sig4:
-                    st.session_state.bin_sig2_val = f"{curr_num + 1:02d}"
-                    st.session_state.focus_item_search = True
-                    st.rerun()
-                else:
-                    st.toast(f"Reached Max Sigma 4 Limit ({max_sig4})!", icon="⚠️")
-            except ValueError:
-                st.error("Sigma 4 must be numeric to increment.")
-
-        if col_next2.button("📑 Next Drawer / Row", use_container_width=True):
-            if len(in_sig1) == 2:
-                first_char, second_char = in_sig1[0], in_sig1[1]
-                next_sig1 = first_char + chr(ord(second_char) + 1) if second_char < 'Z' else chr(ord(first_char) + 1) + 'A'
-                st.session_state.bin_sig1_val = next_sig1
-                st.session_state.bin_sig2_val = "01"
-                st.session_state.focus_item_search = True
-                st.rerun()
+        col_next1.button("➡️ Next Bin / Column (+1)", use_container_width=True, on_click=advance_bin)
+        col_next2.button("📑 Next Drawer / Row", use_container_width=True, on_click=advance_drawer)
 
     st.divider()
 
