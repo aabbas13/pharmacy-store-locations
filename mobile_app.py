@@ -531,29 +531,30 @@ else:
             st.session_state.focus_item_search = True
 
         row_fmt_info = get_row_format(start_row, max_row)
-        if row_fmt_info["numeric"]:
-            _pad = row_fmt_info["pad_len"]
-            row_def_caption = (
-                f"Numeric row, {_pad}-digit, from `{str(row_fmt_info['start_val']).zfill(_pad)}` "
-                f"to `{str(row_fmt_info['max_val']).zfill(_pad)}`."
-            )
-        else:
-            _prefix_part = f"prefix `{row_fmt_info['prefix']}` fixed, " if row_fmt_info["prefix"] else ""
-            row_def_caption = (
-                f"{_prefix_part}row identifier `{row_fmt_info['start_char']}`–`{row_fmt_info['max_char']}` "
-                f"(wraps back to `{row_fmt_info['start_char']}` and bumps the column after `{row_fmt_info['max_char']}`)."
-            )
-        st.caption(f"📏 **Max Row:** `{max_row}` — {row_def_caption} **Max Column:** `{max_col_val:02d}`.")
-
-        if all_fields_filled:
-            b_prevloc, b_nextloc = st.columns(2)
-            b_prevloc.button("⬆️ Previous Vertical Location", use_container_width=True, on_click=retreat_vertical)
-            b_nextloc.button("⬇️ Next Vertical Location", use_container_width=True, on_click=advance_vertical)
 
     if all_fields_filled:
         st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
     else:
         st.warning("⚠️ Please complete all location fields (Area, Type, Sigma 3, Sigma 4).")
+
+    if row_fmt_info["numeric"]:
+        _pad = row_fmt_info["pad_len"]
+        row_def_caption = (
+            f"Numeric row, {_pad}-digit, from `{str(row_fmt_info['start_val']).zfill(_pad)}` "
+            f"to `{str(row_fmt_info['max_val']).zfill(_pad)}`."
+        )
+    else:
+        _prefix_part = f"prefix `{row_fmt_info['prefix']}` fixed, " if row_fmt_info["prefix"] else ""
+        row_def_caption = (
+            f"{_prefix_part}row identifier `{row_fmt_info['start_char']}`–`{row_fmt_info['max_char']}` "
+            f"(wraps back to `{row_fmt_info['start_char']}` and bumps the column after `{row_fmt_info['max_char']}`)."
+        )
+    st.caption(f"📏 **Max Row:** `{max_row}` — {row_def_caption} **Max Column:** `{max_col_val:02d}`.")
+
+    if all_fields_filled:
+        b_prevloc, b_nextloc = st.columns(2)
+        b_prevloc.button("⬆️ Previous Vertical Location", use_container_width=True, on_click=retreat_vertical)
+        b_nextloc.button("⬇️ Next Vertical Location", use_container_width=True, on_click=advance_vertical)
 
     st.divider()
 
