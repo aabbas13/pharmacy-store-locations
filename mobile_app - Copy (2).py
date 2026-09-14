@@ -184,48 +184,17 @@ if app_mode == "🔍 Item Search":
     else:
         matched_items = items
 
-    if not matched_items:
-        st.warning("No matching items found.")
-    elif search_term:
-        # Searching: resolve directly instead of using a dropdown, since a
-        # selectbox whose option list changes every keystroke can desync
-        # from the selected value in Streamlit (clicking an option doesn't
-        # always register). A single match jumps straight in; multiple
-        # matches get a plain click-to-select list.
-        matched_indices = [items.index(itm) for itm in matched_items]
-        if len(matched_items) == 1:
-            if st.session_state.current_index != matched_indices[0]:
-                st.session_state.current_index = matched_indices[0]
-                save_persistent_state({"last_item_index": st.session_state.current_index})
-        else:
-            if st.session_state.current_index not in matched_indices:
-                st.session_state.current_index = matched_indices[0]
-                save_persistent_state({"last_item_index": st.session_state.current_index})
-            st.caption(f"{len(matched_items)} matches — tap one to view:")
-            for itm in matched_items:
-                idx = items.index(itm)
-                label = f"[{itm['item_code'][-4:]}] {itm['item_code']} — {itm['description']}"
-                is_selected = (idx == st.session_state.current_index)
-                if st.button(
-                    ("✅ " if is_selected else "") + label,
-                    key=f"searchsel_{idx}",
-                    use_container_width=True,
-                    type="primary" if is_selected else "secondary",
-                ):
-                    st.session_state.current_index = idx
-                    save_persistent_state({"last_item_index": idx})
-                    st.rerun()
-    else:
-        # Browsing with no search term: a static full list, so the plain
-        # dropdown is fine here (its options don't change every keystroke).
-        item_options = {}
-        for itm in matched_items:
-            code = itm["item_code"]
-            desc = itm["description"]
-            last_4 = code[-4:] if len(code) >= 4 else code
-            label = f"[{last_4}] {code} — {desc}"
-            item_options[label] = items.index(itm)
+    item_options = {}
+    for idx, itm in enumerate(matched_items):
+        code = itm["item_code"]
+        desc = itm["description"]
+        last_4 = code[-4:] if len(code) >= 4 else code
+        label = f"[{last_4}] {code} — {desc}"
+        item_options[label] = items.index(itm)
 
+    if not item_options:
+        st.warning("No matching items found.")
+    else:
         def on_dropdown_select():
             selected_str = st.session_state.search_dropdown
             if selected_str in item_options:
@@ -233,6 +202,8 @@ if app_mode == "🔍 Item Search":
                 save_persistent_state({"last_item_index": st.session_state.current_index})
 
         st.session_state.current_index = max(0, min(st.session_state.current_index, len(items) - 1))
+
+        current_item_obj = items[st.session_state.current_index]
         current_label = next((lbl for lbl, idx in item_options.items() if idx == st.session_state.current_index), list(item_options.keys())[0])
         dropdown_idx = list(item_options.keys()).index(current_label)
 
@@ -250,63 +221,62 @@ if app_mode == "🔍 Item Search":
     st.caption(f"Item {st.session_state.current_index + 1} of {len(items)} | Code: `{current_item['item_code']}` | UOM: `{current_item['uom']}`")
     st.subheader(current_item["description"])
 
-    with st.expander("📍 Locations", expanded=False):
-        current_locations = current_item["locations"]
-        if current_locations:
-            st.write("#### Registered Locations:")
-            for loc_idx, loc_val in enumerate(current_locations):
-                c_loc, c_del = st.columns([4, 1])
-                c_loc.info(f"`{loc_val}`")
-                if c_del.button("❌", key=f"del_{st.session_state.current_index}_{loc_idx}"):
-                    updated_locs = [l for l in current_locations if l != loc_val]
-                    cell_text = "\n".join(updated_locs)
-                    sheet.update_cell(current_item["row_indices"][0], 5, cell_text)
-                    st.toast(f"Removed {loc_val}!", icon="🗑️")
-                    st.cache_data.clear()
-                    st.rerun()
-        else:
-            st.info("No locations assigned to this item yet.")
-
-        st.divider()
-        st.write("#### ➕ Add New Location")
-
-        col_a, col_t, col_s1, col_s2 = st.columns(4)
-        area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
-        loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}")
-
-        if loc_type == "DR":
-            sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
-            sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}")
-            generated_location = f"{area_val}.DR.{sig1}.{sig2}"
-        elif loc_type == "SH":
-            sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}")
-            sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}")
-            generated_location = f"{area_val}.SH.{sig1}.{sig2}"
-        else:
-            sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}")
-            sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
-            generated_location = f"{area_val}.{sig1}.01.{sig2}"
-
-        c_in, c_btn = st.columns([3, 1])
-        target_loc_input = c_in.text_input(
-            "Final Location Code",
-            value=generated_location,
-            key=f"item_loc_input_{st.session_state.current_index}"
-        ).strip().upper()
-
-        fixed_location = fix_location_format(target_loc_input)
-
-        if c_btn.button("Add Location", type="primary", use_container_width=True):
-            if not fixed_location:
-                st.warning("Invalid Location Format.")
-            elif fixed_location in current_locations:
-                st.warning("Location already assigned.")
-            else:
-                updated_locs = current_locations + [fixed_location]
-                sheet.update_cell(current_item["row_indices"][0], 5, "\n".join(updated_locs))
-                st.toast(f"Added {fixed_location}!", icon="✅")
+    current_locations = current_item["locations"]
+    if current_locations:
+        st.write("### 📍 Registered Locations:")
+        for loc_idx, loc_val in enumerate(current_locations):
+            c_loc, c_del = st.columns([4, 1])
+            c_loc.info(f"`{loc_val}`")
+            if c_del.button("❌", key=f"del_{st.session_state.current_index}_{loc_idx}"):
+                updated_locs = [l for l in current_locations if l != loc_val]
+                cell_text = "\n".join(updated_locs)
+                sheet.update_cell(current_item["row_indices"][0], 5, cell_text)
+                st.toast(f"Removed {loc_val}!", icon="🗑️")
                 st.cache_data.clear()
                 st.rerun()
+    else:
+        st.info("No locations assigned to this item yet.")
+
+    st.divider()
+    st.write("### ➕ Add New Location")
+
+    col_a, col_t, col_s1, col_s2 = st.columns(4)
+    area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
+    loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}")
+
+    if loc_type == "DR":
+        sig1 = col_s1.selectbox("Series", ["BA", "BB", "BC", "BD", "BE", "BF", "DA", "DB", "DC"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 30)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.DR.{sig1}.{sig2}"
+    elif loc_type == "SH":
+        sig1 = col_s1.selectbox("Sec", ["A", "B", "C", "D", "E", "F"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Level#", [f"{i:02d}" for i in range(1, 40)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.SH.{sig1}.{sig2}"
+    else:
+        sig1 = col_s1.selectbox("Sec", ["FR", "RA", "RB"], key=f"item_sig1_{st.session_state.current_index}")
+        sig2 = col_s2.selectbox("Bin#", [f"{i:02d}" for i in range(1, 20)], key=f"item_sig2_{st.session_state.current_index}")
+        generated_location = f"{area_val}.{sig1}.01.{sig2}"
+
+    c_in, c_btn = st.columns([3, 1])
+    target_loc_input = c_in.text_input(
+        "Final Location Code", 
+        value=generated_location, 
+        key=f"item_loc_input_{st.session_state.current_index}"
+    ).strip().upper()
+
+    fixed_location = fix_location_format(target_loc_input)
+
+    if c_btn.button("Add Location", type="primary", use_container_width=True):
+        if not fixed_location:
+            st.warning("Invalid Location Format.")
+        elif fixed_location in current_locations:
+            st.warning("Location already assigned.")
+        else:
+            updated_locs = current_locations + [fixed_location]
+            sheet.update_cell(current_item["row_indices"][0], 5, "\n".join(updated_locs))
+            st.toast(f"Added {fixed_location}!", icon="✅")
+            st.cache_data.clear()
+            st.rerun()
 
     st.divider()
     
@@ -451,68 +421,8 @@ else:
         # Always refocus the item search box after navigating
         st.session_state.focus_item_search = True
 
-    def retreat_vertical():
-        curr_row = st.session_state.bin_sig1_in.strip().upper()
-        curr_col = st.session_state.bin_sig2_in.strip()
-        fmt = get_row_format(start_row, max_row)
-
-        drop_col = False
-
-        if fmt["numeric"]:
-            try:
-                curr_val = int(curr_row)
-            except ValueError:
-                curr_val = fmt["start_val"]
-
-            if curr_val <= fmt["start_val"]:
-                new_row = str(fmt["max_val"]).zfill(fmt["pad_len"])
-                drop_col = True
-            else:
-                new_row = str(curr_val - 1).zfill(fmt["pad_len"])
-        else:
-            if len(curr_row) >= 2:
-                curr_prefix, curr_char = curr_row[:-1], curr_row[-1]
-            else:
-                curr_prefix, curr_char = "", (curr_row or fmt["start_char"])
-
-            if curr_char <= fmt["start_char"]:
-                new_row = curr_prefix + fmt["max_char"]
-                drop_col = True
-            else:
-                new_row = curr_prefix + chr(ord(curr_char) - 1)
-
-        st.session_state.bin_sig1_in = new_row
-
-        # If we wrapped below the start row, step back to the previous column
-        if drop_col:
-            try:
-                curr_num = int(curr_col)
-                st.session_state.bin_sig2_in = f"{max(1, curr_num - 1):02d}"
-            except ValueError:
-                pass  # Keep as is if not a number
-
-        # Always refocus the item search box after navigating
-        st.session_state.focus_item_search = True
-
-    row_fmt_info = get_row_format(start_row, max_row)
-    if row_fmt_info["numeric"]:
-        _pad = row_fmt_info["pad_len"]
-        row_def_caption = (
-            f"Numeric row, {_pad}-digit, from `{str(row_fmt_info['start_val']).zfill(_pad)}` "
-            f"to `{str(row_fmt_info['max_val']).zfill(_pad)}`."
-        )
-    else:
-        _prefix_part = f"prefix `{row_fmt_info['prefix']}` fixed, " if row_fmt_info["prefix"] else ""
-        row_def_caption = (
-            f"{_prefix_part}row identifier `{row_fmt_info['start_char']}`–`{row_fmt_info['max_char']}` "
-            f"(wraps back to `{row_fmt_info['start_char']}` and bumps the column after `{row_fmt_info['max_char']}`)."
-        )
-    st.caption(f"📏 **Max Row:** `{max_row}` — {row_def_caption}")
-
     if all_fields_filled:
-        b_prevloc, b_nextloc = st.columns(2)
-        b_prevloc.button("⬆️ Previous Vertical Location", use_container_width=True, on_click=retreat_vertical)
-        b_nextloc.button("⬇️ Next Vertical Location", use_container_width=True, on_click=advance_vertical)
+        st.button("⬇️ Next Vertical Location (Row ↓, then Col →)", use_container_width=True, on_click=advance_vertical)
 
     st.divider()
 
