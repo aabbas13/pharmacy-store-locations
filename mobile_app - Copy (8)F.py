@@ -3,6 +3,7 @@ import os
 import re
 import urllib.parse
 import streamlit as st
+import streamlit.components.v1 as components
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -69,6 +70,38 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Both search boxes share the "E.G. 1234" placeholder and are searched by
+# 4-digit code most of the time - hint mobile browsers to open the numeric
+# keypad first. This doesn't restrict the field: letters still work, and
+# most keyboards offer an ABC switch if a name needs to be typed instead.
+components.html(
+    """
+    <script>
+    (function() {
+        function applyNumericKeyboard() {
+            try {
+                const doc = window.parent.document;
+                const inputs = doc.querySelectorAll('input[type="text"]');
+                inputs.forEach(function(inp) {
+                    if (inp.placeholder && inp.placeholder.includes("E.G. 1234")) {
+                        if (inp.getAttribute('inputmode') !== 'numeric') {
+                            inp.setAttribute('inputmode', 'numeric');
+                        }
+                    }
+                });
+            } catch (e) {}
+        }
+        applyNumericKeyboard();
+        try {
+            const obs = new MutationObserver(applyNumericKeyboard);
+            obs.observe(window.parent.document.body, {childList: true, subtree: true});
+        } catch (e) {}
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
