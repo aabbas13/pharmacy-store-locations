@@ -268,23 +268,26 @@ if app_mode == "🔍 Item Search":
     st.caption(f"Item {st.session_state.current_index + 1} of {len(items)} | Code: `{current_item['item_code']}` | UOM: `{current_item['uom']}`")
     st.subheader(current_item["description"])
 
-    current_locations = current_item["locations"]
-    st.write("#### 📍 Registered Locations:")
-    if current_locations:
-        for loc_idx, loc_val in enumerate(current_locations):
-            c_loc, c_del = st.columns([4, 1])
-            c_loc.info(f"`{loc_val}`")
-            if c_del.button("❌", key=f"del_{st.session_state.current_index}_{loc_idx}"):
-                updated_locs = [l for l in current_locations if l != loc_val]
-                cell_text = "\n".join(updated_locs)
-                sheet.update_cell(current_item["row_indices"][0], 5, cell_text)
-                st.toast(f"Removed {loc_val}!", icon="🗑️")
-                st.cache_data.clear()
-                st.rerun()
-    else:
-        st.info("No locations assigned to this item yet.")
+    with st.expander("📍 Locations", expanded=False):
+        current_locations = current_item["locations"]
+        if current_locations:
+            st.write("#### Registered Locations:")
+            for loc_idx, loc_val in enumerate(current_locations):
+                c_loc, c_del = st.columns([4, 1])
+                c_loc.info(f"`{loc_val}`")
+                if c_del.button("❌", key=f"del_{st.session_state.current_index}_{loc_idx}"):
+                    updated_locs = [l for l in current_locations if l != loc_val]
+                    cell_text = "\n".join(updated_locs)
+                    sheet.update_cell(current_item["row_indices"][0], 5, cell_text)
+                    st.toast(f"Removed {loc_val}!", icon="🗑️")
+                    st.cache_data.clear()
+                    st.rerun()
+        else:
+            st.info("No locations assigned to this item yet.")
 
-    with st.expander("➕ Add New Location", expanded=False):
+        st.divider()
+        st.write("#### ➕ Add New Location")
+
         col_a, col_t, col_s1, col_s2 = st.columns(4)
         area_val = col_a.selectbox("Area", ["A1", "A2", "CR", "B1"], key=f"item_area_{st.session_state.current_index}")
         loc_type = col_t.selectbox("Type", ["DR", "SH", "FR"], key=f"item_type_{st.session_state.current_index}")
