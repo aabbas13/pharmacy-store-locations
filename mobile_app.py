@@ -2,8 +2,12 @@ import json
 import os
 import re
 import urllib.parse
+import requests
 import streamlit as st
 import gspread
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials as firebase_credentials
 from google.oauth2.service_account import Credentials
 
 # --- PERSISTENT STATE HELPER ---
@@ -31,6 +35,123 @@ persisted_data = load_persistent_state()
 
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
+
+# --- INDIVIDUAL STORE APPS SIGN-IN ---
+def firebase_settings():
+    try:
+        return (
+            str(st.secrets["firebase"]["web_api_key"]),
+            str(st.secrets["firebase"]["project_id"]),
+            dict(st.secrets["firebase_admin"]),
+        )
+    except (KeyError, TypeError):
+        st.error("Firebase sign-in is not configured in Streamlit Secrets.")
+        st.stop()
+
+
+@st.cache_resource
+def get_firebase_admin_app():
+    _, project_id, service_account = firebase_settings()
+    try:
+        return firebase_admin.get_app("store_apps_auth")
+    except ValueError:
+        credential = firebase_credentials.Certificate(service_account)
+        return firebase_admin.initialize_app(
+            credential,
+            options={"projectId": project_id},
+            name="store_apps_auth",
+        )
+
+
+def firebase_sign_in(email: str, password: str) -> dict:
+    web_api_key, _, _ = firebase_settings()
+    response = requests.post(
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword",
+        params={"key": web_api_key},
+        json={"email": email, "password": password, "returnSecureToken": True},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def refresh_firebase_id_token(refresh_token: str) -> dict:
+    web_api_key, _, _ = firebase_settings()
+    response = requests.post(
+        "https://securetoken.googleapis.com/v1/token",
+        params={"key": web_api_key},
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def clear_firebase_session() -> None:
+    for key in ("store_apps_id_token", "store_apps_refresh_token", "store_apps_email"):
+        st.session_state.pop(key, None)
+
+
+def show_firebase_login(message: str = "") -> None:
+    st.title("🔐 Store Apps Sign In")
+    if message:
+        st.info(message)
+    with st.form("store_apps_login_form"):
+        email = st.text_input("Email", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+    if submitted:
+        try:
+            result = firebase_sign_in(email.strip(), password)
+            app = get_firebase_admin_app()
+            decoded = firebase_auth.verify_id_token(result["idToken"], check_revoked=True, app=app)
+            if not decoded.get("mobile_app", False):
+                st.error("Your account does not have access to the mobile app. Contact the administrator.")
+                return
+            st.session_state["store_apps_id_token"] = result["idToken"]
+            st.session_state["store_apps_refresh_token"] = result["refreshToken"]
+            st.session_state["store_apps_email"] = email.strip()
+            st.rerun()
+        except (requests.RequestException, KeyError, ValueError, firebase_admin.exceptions.FirebaseError):
+            st.error("Sign-in failed. Check your email and password, or contact the administrator.")
+
+
+def require_firebase_user() -> None:
+    token = st.session_state.get("store_apps_id_token")
+    if not token:
+        show_firebase_login()
+        st.stop()
+
+    try:
+        app = get_firebase_admin_app()
+        decoded = firebase_auth.verify_id_token(token, check_revoked=True, app=app)
+    except firebase_auth.ExpiredIdTokenError:
+        try:
+            result = refresh_firebase_id_token(st.session_state["store_apps_refresh_token"])
+            decoded = firebase_auth.verify_id_token(
+                result["id_token"], check_revoked=True, app=get_firebase_admin_app()
+            )
+            st.session_state["store_apps_id_token"] = result["id_token"]
+        except (requests.RequestException, KeyError, firebase_admin.exceptions.FirebaseError):
+            clear_firebase_session()
+            show_firebase_login("Your sign-in expired. Please sign in again.")
+            st.stop()
+    except firebase_admin.exceptions.FirebaseError:
+        clear_firebase_session()
+        show_firebase_login("Your access is no longer active. Please sign in again.")
+        st.stop()
+    if not decoded.get("mobile_app", False):
+        clear_firebase_session()
+        st.title("🔐 Store Apps Sign In")
+        st.error("Your account does not have access to the mobile app. Contact the administrator.")
+        st.stop()
+
+
+require_firebase_user()
+st.sidebar.caption(f"Signed in: {st.session_state.get('store_apps_email', '')}")
+if st.sidebar.button("Sign out", key="store_apps_sign_out"):
+    clear_firebase_session()
+    st.rerun()
 
 st.markdown("""
 <style>

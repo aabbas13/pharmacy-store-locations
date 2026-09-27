@@ -1,4 +1,8 @@
 credentials.json
+firebase-admin*.json
+service-account*.json
+.streamlit/secrets.toml
+.last_state.json
 __pycache__/
 *.pyc
 *.exe
