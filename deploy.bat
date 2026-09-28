@@ -39,11 +39,6 @@ if errorlevel 1 (
     echo ERROR: Could not stage the public app files.
     goto :failed
 )
-git add -u -- store_apps_user_management.py STORE_APPS_AUTH_SETUP.md
-if errorlevel 1 (
-    echo ERROR: Could not stage the selected deployment files.
-    goto :failed
-)
 
 git diff --cached --check
 if errorlevel 1 (
