@@ -32,6 +32,99 @@ persisted_data = load_persistent_state()
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
+
+VOICE_COMPONENT = st.components.v2.component(
+    name="store_voice_command_control",
+    html="""
+      <div class="voice-control">
+        <button id="voice-start" type="button">🎙️ Speak command</button>
+        <span id="voice-status" aria-live="polite">Tap to speak one command.</span>
+      </div>
+    """,
+    css="""
+      .voice-control { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-family: sans-serif; }
+      #voice-start { border: 2px solid #1F4E78; border-radius: 10px; padding: 10px 16px; font-weight: 700; background: #1F4E78; color: white; cursor: pointer; }
+      #voice-start:disabled { opacity: .65; cursor: wait; }
+      #voice-status { font-size: .9rem; color: #334155; }
+    """,
+    js="""
+      export default function ({ parentElement, setTriggerValue }) {
+        const button = parentElement.querySelector("#voice-start");
+        const status = parentElement.querySelector("#voice-status");
+        const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!Recognition) {
+          button.disabled = true;
+          status.textContent = "Voice input is not supported in this browser. Use the search field.";
+          return;
+        }
+
+        const recognition = new Recognition();
+        recognition.lang = "en-US";
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        let listening = false;
+        const resetButton = () => {
+          listening = false;
+          button.textContent = "🎙️ Speak command";
+          button.disabled = false;
+        };
+
+        button.addEventListener("click", () => {
+          if (listening) {
+            recognition.stop();
+            return;
+          }
+          status.textContent = "Listening…";
+          button.textContent = "⏹ Stop listening";
+          listening = true;
+          try {
+            recognition.start();
+          } catch (error) {
+            resetButton();
+            status.textContent = "Could not start voice input. Tap and try again.";
+          }
+        });
+
+        recognition.onresult = (event) => {
+          const transcript = Array.from(event.results)
+            .map((result) => result[0].transcript)
+            .join(" ")
+            .trim();
+          status.textContent = transcript ? "Heard: " + transcript : "No speech was recognized.";
+          if (transcript) setTriggerValue("command", transcript);
+        };
+        recognition.onerror = (event) => {
+          const messages = {
+            "not-allowed": "Microphone access was denied. Allow microphone access in your browser settings.",
+            "service-not-allowed": "Speech recognition is unavailable in this browser.",
+            "no-speech": "No speech was detected. Tap and try again.",
+            "network": "Speech recognition needs a working internet connection."
+          };
+          status.textContent = messages[event.error] || "Voice input stopped. Tap and try again.";
+          resetButton();
+        };
+        recognition.onend = resetButton;
+
+        return () => {
+          try { recognition.abort(); } catch (error) {}
+        };
+      }
+    """,
+)
+
+def show_voice_commands():
+    result = VOICE_COMPONENT(
+        key="store_voice_commands",
+        height=58,
+        width="stretch",
+        on_command_change=lambda: None,
+    )
+    return getattr(result, "command", None)
+
+
 st.markdown("""
 <style>
     .block-container { 
@@ -108,6 +201,141 @@ def fix_location_format(loc_str: str) -> str:
         return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:6]}.{raw_chars[6:8]}"
     return cleaned
 
+
+
+SPOKEN_DIGITS = {
+    "zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3",
+    "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8",
+    "nine": "9",
+}
+SPOKEN_LETTERS = {
+    "ay": "a", "bee": "b", "cee": "c", "see": "c", "dee": "d",
+    "are": "r", "ar": "r",
+}
+LOCATION_FILLER_WORDS = {
+    "location", "bin", "area", "type", "row", "series", "section",
+    "number", "code", "is", "please", "the",
+}
+
+def parse_voice_command(transcript: str) -> dict:
+    words = re.findall(r"[a-z]+|[0-9]+", str(transcript).lower())
+    tokens = [SPOKEN_DIGITS.get(word, SPOKEN_LETTERS.get(word, word)) for word in words]
+
+    if any(word in {"next", "forward", "advance"} for word in tokens):
+        return {"action": "next"}
+    if any(word in {"previous", "prev", "back", "backward", "backwards"} for word in tokens):
+        return {"action": "previous"}
+
+    separators = {"in", "at", "to", "location", "bin"}
+    separator_index = next((i for i, word in enumerate(tokens) if word in separators), None)
+    item_tokens = tokens if separator_index is None else tokens[:separator_index]
+    spoken_item_digits = "".join(ch for word in item_tokens for ch in word if ch.isdigit())
+    suffix = spoken_item_digits[-4:] if len(spoken_item_digits) >= 4 else ""
+
+    if len(suffix) != 4:
+        return {"action": "invalid", "message": "Say an item’s last four digits, such as “4005”."}
+
+    if separator_index is None:
+        return {"action": "item", "suffix": suffix}
+
+    location_tokens = tokens[separator_index + 1:]
+    location_text = "".join(
+        word for word in location_tokens
+        if word not in LOCATION_FILLER_WORDS
+    ).upper()
+    location = fix_location_format(location_text)
+    if not re.fullmatch(r"[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,2}", location):
+        return {
+            "action": "invalid",
+            "message": "I heard the item number, but not a valid location. Say, for example, “item 4005 in A1 DR CA 03”.",
+        }
+    return {"action": "assign", "suffix": suffix, "location": location}
+
+def get_row_format(fmt_start_row: str, fmt_max_row: str) -> dict:
+    """Return the numeric/alphabetic row bounds used by bin navigation."""
+    if fmt_start_row.isdigit():
+        pad_len = len(fmt_start_row)
+        start_val = int(fmt_start_row)
+        digits = "".join(ch for ch in fmt_max_row if ch.isdigit())
+        max_val = int(digits) if digits else start_val
+        return {"numeric": True, "pad_len": pad_len, "start_val": start_val, "max_val": max_val}
+    prefix = fmt_start_row[:-1] if len(fmt_start_row) >= 2 else ""
+    start_char = fmt_start_row[-1] if fmt_start_row else "A"
+    max_char = fmt_max_row[-1] if fmt_max_row else start_char
+    return {"numeric": False, "prefix": prefix, "start_char": start_char, "max_char": max_char}
+
+def move_bin_vertical(direction: str, start_row: str, max_row: str, max_col_val: int) -> None:
+    current_row = st.session_state.bin_sig1_in.strip().upper()
+    current_col = st.session_state.bin_sig2_in.strip()
+    fmt = get_row_format(start_row, max_row)
+    wrap_column = False
+
+    if direction == "next":
+        if fmt["numeric"]:
+            try:
+                current_value = int(current_row)
+            except ValueError:
+                current_value = fmt["start_val"]
+            if current_value >= fmt["max_val"]:
+                new_row = str(fmt["start_val"]).zfill(fmt["pad_len"])
+                wrap_column = True
+            else:
+                new_row = str(current_value + 1).zfill(fmt["pad_len"])
+        else:
+            if len(current_row) >= 2:
+                prefix, current_char = current_row[:-1], current_row[-1]
+            else:
+                prefix, current_char = "", (current_row or fmt["start_char"])
+            if current_char >= fmt["max_char"]:
+                new_row = prefix + fmt["start_char"]
+                wrap_column = True
+            else:
+                new_row = prefix + chr(ord(current_char) + 1)
+    else:
+        if fmt["numeric"]:
+            try:
+                current_value = int(current_row)
+            except ValueError:
+                current_value = fmt["start_val"]
+            if current_value <= fmt["start_val"]:
+                new_row = str(fmt["max_val"]).zfill(fmt["pad_len"])
+                wrap_column = True
+            else:
+                new_row = str(current_value - 1).zfill(fmt["pad_len"])
+        else:
+            if len(current_row) >= 2:
+                prefix, current_char = current_row[:-1], current_row[-1]
+            else:
+                prefix, current_char = "", (current_row or fmt["start_char"])
+            if current_char <= fmt["start_char"]:
+                new_row = prefix + fmt["max_char"]
+                wrap_column = True
+            else:
+                new_row = prefix + chr(ord(current_char) - 1)
+
+    st.session_state.bin_sig1_in = new_row
+    if wrap_column:
+        try:
+            current_number = int(current_col)
+            next_number = current_number + (1 if direction == "next" else -1)
+            if next_number > max_col_val:
+                next_number = 1
+            if next_number < 1:
+                next_number = max_col_val
+            st.session_state.bin_sig2_in = f"{next_number:02d}"
+        except ValueError:
+            pass
+    st.session_state.focus_item_search = True
+
+def location_from_bin_parts(area: str, bin_type: str, row: str, column: str) -> str:
+    if not all((area, bin_type, row, column)):
+        return ""
+    if bin_type == "FR":
+        raw_location = f"{area}.{row}.01.{column}"
+    else:
+        raw_location = f"{area}.{bin_type}.{row}.{column}"
+    return fix_location_format(raw_location)
+
 @st.cache_data(ttl=30)
 def load_data():
     records = sheet.get_all_records()
@@ -149,6 +377,17 @@ def load_data():
 
 items = load_data()
 
+
+def assign_item_to_location(item: dict, location: str) -> str:
+    if location in item["locations"]:
+        return "exists"
+    sheet.update_cell(item["row_indices"][0], 5, "\n".join(item["locations"] + [location]))
+    st.cache_data.clear()
+    st.session_state.last_assigned_item = item
+    save_persistent_state({"last_assigned_item_data": item})
+    return "assigned"
+
+
 if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
@@ -183,6 +422,42 @@ st.divider()
 # ==============================================================================
 if app_mode == "🔍 Item Search":
     st.subheader("🔍 Item Search")
+    st.caption("Voice examples: “4005” searches the item; “item 4005 in A1 DR CA 03” adds that location; say “next item” or “previous item” to browse.")
+    spoken_command = show_voice_commands()
+    if spoken_command:
+        command = parse_voice_command(spoken_command)
+        if command["action"] in {"next", "previous"}:
+            step = 1 if command["action"] == "next" else -1
+            new_index = max(0, min(len(items) - 1, st.session_state.current_index + step))
+            if new_index == st.session_state.current_index:
+                st.info("There are no more items in that direction.")
+            else:
+                st.session_state.current_index = new_index
+                st.session_state["search_term_input"] = ""
+                save_persistent_state({"last_item_index": new_index})
+                st.toast("Moved to the next item." if step > 0 else "Moved to the previous item.")
+        elif command["action"] == "invalid":
+            st.warning(command["message"])
+        elif command["action"] == "assign":
+            st.session_state["search_term_input"] = ""
+            matches = [itm for itm in items if itm["item_code"].endswith(command["suffix"])]
+            if len(matches) == 1:
+                item = matches[0]
+                st.session_state.current_index = items.index(item)
+                result = assign_item_to_location(item, command["location"])
+                if result == "assigned":
+                    st.toast(f"Added {command['location']} to item {item['item_code']}.", icon="✅")
+                    save_persistent_state({"last_item_index": st.session_state.current_index})
+                    st.rerun()
+                else:
+                    st.info(f"Item {item['item_code']} is already assigned to {command['location']}.")
+            elif not matches:
+                st.warning(f"No item ends in {command['suffix']}.")
+            else:
+                st.warning(f"{len(matches)} items end in {command['suffix']}. Use the item search to choose the right one.")
+        else:
+            st.session_state["search_term_input"] = command["suffix"]
+            st.toast(f"Searching item suffix {command['suffix']}.")
     
     raw_search = st.text_input(
         "Search Medicine (Type 4 digits or Name)",
@@ -360,6 +635,60 @@ else:
     if "focus_item_search" not in st.session_state:
         st.session_state.focus_item_search = False
 
+    st.caption("Voice examples: say “4005” to assign it to the active bin, “next bin” or “previous bin” to move, or “item 4005 in A1 DR CA 03” to assign to a spoken location.")
+    spoken_command = show_voice_commands()
+    if spoken_command:
+        command = parse_voice_command(spoken_command)
+        if command["action"] in {"next", "previous"}:
+            bin_parts_ready = all(
+                st.session_state.get(key, "").strip()
+                for key in ("bin_area_in", "bin_type_in", "bin_sig1_in", "bin_sig2_in")
+            )
+            if not bin_parts_ready:
+                st.warning("Enter the area, type, row, and column before moving to another bin.")
+            else:
+                bounds = st.session_state.get("vertical_bounds", p_bounds)
+                try:
+                    voice_max_col = int(bounds.get("max_col", "30"))
+                    if voice_max_col < 1:
+                        voice_max_col = 30
+                except (TypeError, ValueError):
+                    voice_max_col = 30
+                move_bin_vertical(
+                    command["action"],
+                    str(bounds.get("start", "AA")).strip().upper(),
+                    str(bounds.get("max", "AO")).strip().upper(),
+                    voice_max_col,
+                )
+                st.toast("Moved to the next bin." if command["action"] == "next" else "Moved to the previous bin.")
+        elif command["action"] == "invalid":
+            st.warning(command["message"])
+        else:
+            location = command.get("location") or location_from_bin_parts(
+                st.session_state.get("bin_area_in", "").strip().upper(),
+                st.session_state.get("bin_type_in", "").strip().upper(),
+                st.session_state.get("bin_sig1_in", "").strip().upper(),
+                st.session_state.get("bin_sig2_in", "").strip().upper(),
+            )
+            if not location:
+                st.warning("Complete the active bin location, or say the full location with the item.")
+            else:
+                matches = [itm for itm in items if itm["item_code"].endswith(command["suffix"])]
+                if len(matches) == 1:
+                    item = matches[0]
+                    result = assign_item_to_location(item, location)
+                    if result == "assigned":
+                        st.session_state["bin_digit_srch"] = ""
+                        st.session_state.focus_item_search = True
+                        st.toast(f"Assigned item {item['item_code']} to {location}.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.info(f"Item {item['item_code']} is already in {location}.")
+                elif not matches:
+                    st.warning(f"No item ends in {command['suffix']}.")
+                else:
+                    st.warning(f"{len(matches)} items end in {command['suffix']}. Use the item search to choose the right one.")
+
     with st.expander("📍 Manual Location Input", expanded=False):
         col_a, col_t, col_s1, col_s2 = st.columns(4)
 
@@ -408,126 +737,13 @@ else:
         # Save these bounds for the next session
         save_persistent_state({"vertical_bounds": {"start": start_row, "max": max_row, "max_col": max_col_raw}})
 
-        def get_row_format(fmt_start_row: str, fmt_max_row: str) -> dict:
-            """
-            The Starting Row defines the FORMAT of the row (numeric vs alphabetical,
-            and whether there's a fixed prefix). The row identifier that actually
-            increments is always the LAST character/digit(s):
-              - "AA" -> prefix "A" (fixed, never auto-increments), identifier "A".."Z"
-              - "A"  -> no prefix, identifier "A".."Z"
-              - "01" -> no prefix, numeric identifier, 2-digit zero padded
-            Max Row may be given as the full row (e.g. "AO") or just the identifier
-            (e.g. "O") - only its last character/digits are used as the limit.
-            """
-            if fmt_start_row.isdigit():
-                pad_len = len(fmt_start_row)
-                start_val = int(fmt_start_row)
-                digits = ''.join(ch for ch in fmt_max_row if ch.isdigit())
-                max_val = int(digits) if digits else start_val
-                return {"numeric": True, "pad_len": pad_len, "start_val": start_val, "max_val": max_val}
-            else:
-                prefix = fmt_start_row[:-1] if len(fmt_start_row) >= 2 else ""
-                start_char = fmt_start_row[-1] if fmt_start_row else "A"
-                max_char = fmt_max_row[-1] if fmt_max_row else start_char
-                return {"numeric": False, "prefix": prefix, "start_char": start_char, "max_char": max_char}
+        row_fmt_info = get_row_format(start_row, max_row)
 
         def advance_vertical():
-            curr_row = st.session_state.bin_sig1_in.strip().upper()
-            curr_col = st.session_state.bin_sig2_in.strip()
-            fmt = get_row_format(start_row, max_row)
-
-            bump_col = False
-
-            if fmt["numeric"]:
-                try:
-                    curr_val = int(curr_row)
-                except ValueError:
-                    curr_val = fmt["start_val"]
-
-                if curr_val >= fmt["max_val"]:
-                    new_row = str(fmt["start_val"]).zfill(fmt["pad_len"])
-                    bump_col = True
-                else:
-                    new_row = str(curr_val + 1).zfill(fmt["pad_len"])
-            else:
-                # The prefix (if any) is fixed and preserved as-is; only the last
-                # character (the row identifier) ever increments or wraps.
-                if len(curr_row) >= 2:
-                    curr_prefix, curr_char = curr_row[:-1], curr_row[-1]
-                else:
-                    curr_prefix, curr_char = "", (curr_row or fmt["start_char"])
-
-                if curr_char >= fmt["max_char"]:
-                    new_row = curr_prefix + fmt["start_char"]
-                    bump_col = True
-                else:
-                    new_row = curr_prefix + chr(ord(curr_char) + 1)
-
-            st.session_state.bin_sig1_in = new_row
-
-            # If we wrapped past the max row, advance to the next column,
-            # wrapping the column back to 01 once it passes Max Column
-            if bump_col:
-                try:
-                    curr_num = int(curr_col)
-                    next_num = curr_num + 1
-                    if next_num > max_col_val:
-                        next_num = 1
-                    st.session_state.bin_sig2_in = f"{next_num:02d}"
-                except ValueError:
-                    pass  # Keep as is if not a number
-
-            # Always refocus the item search box after navigating
-            st.session_state.focus_item_search = True
+            move_bin_vertical("next", start_row, max_row, max_col_val)
 
         def retreat_vertical():
-            curr_row = st.session_state.bin_sig1_in.strip().upper()
-            curr_col = st.session_state.bin_sig2_in.strip()
-            fmt = get_row_format(start_row, max_row)
-
-            drop_col = False
-
-            if fmt["numeric"]:
-                try:
-                    curr_val = int(curr_row)
-                except ValueError:
-                    curr_val = fmt["start_val"]
-
-                if curr_val <= fmt["start_val"]:
-                    new_row = str(fmt["max_val"]).zfill(fmt["pad_len"])
-                    drop_col = True
-                else:
-                    new_row = str(curr_val - 1).zfill(fmt["pad_len"])
-            else:
-                if len(curr_row) >= 2:
-                    curr_prefix, curr_char = curr_row[:-1], curr_row[-1]
-                else:
-                    curr_prefix, curr_char = "", (curr_row or fmt["start_char"])
-
-                if curr_char <= fmt["start_char"]:
-                    new_row = curr_prefix + fmt["max_char"]
-                    drop_col = True
-                else:
-                    new_row = curr_prefix + chr(ord(curr_char) - 1)
-
-            st.session_state.bin_sig1_in = new_row
-
-            # If we wrapped below the start row, step back to the previous
-            # column, wrapping to Max Column once it drops below 01
-            if drop_col:
-                try:
-                    curr_num = int(curr_col)
-                    prev_num = curr_num - 1
-                    if prev_num < 1:
-                        prev_num = max_col_val
-                    st.session_state.bin_sig2_in = f"{prev_num:02d}"
-                except ValueError:
-                    pass  # Keep as is if not a number
-
-            # Always refocus the item search box after navigating
-            st.session_state.focus_item_search = True
-
-        row_fmt_info = get_row_format(start_row, max_row)
+            move_bin_vertical("previous", start_row, max_row, max_col_val)
 
     if all_fields_filled:
         st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
@@ -603,15 +819,17 @@ else:
           const shouldFocus = {should_focus};
           if (shouldFocus) {{
               const doc = window.parent.document;
-              setTimeout(() => {{
-                  const inputs = doc.querySelectorAll('input[type="text"]');
-                  inputs.forEach(input => {{
-                      if (input.placeholder && input.placeholder.includes("E.G. 1234")) {{
-                          input.focus();
-                          input.select();
-                      }}
-                  }});
-              }}, 150);
+              let attempts = 0;
+              const focusSearch = () => {{
+                  const input = doc.querySelector('input[placeholder="E.G. 1234 OR PARACETAMOL"]');
+                  if (input && !input.disabled) {{
+                      input.focus();
+                      input.select();
+                  }} else if (attempts++ < 12) {{
+                      setTimeout(focusSearch, 100);
+                  }}
+              }};
+              setTimeout(focusSearch, 100);
           }}
         </script>
       </body>

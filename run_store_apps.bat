@@ -26,7 +26,7 @@ if errorlevel 1 (
     pause
     goto :end
 )
-py -c "import streamlit, gspread, oauth2client, google.auth" >nul 2>&1
+py -c "import streamlit; assert tuple(map(int, streamlit.__version__.split('.')[:2])) >= (1, 51); import gspread, oauth2client, google.auth" >nul 2>&1
 if not errorlevel 1 goto :menu
 echo Installing required Python packages from requirements.txt...
 py -m pip install -r requirements.txt
