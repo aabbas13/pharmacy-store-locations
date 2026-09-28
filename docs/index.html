@@ -4,19 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>HMC Offline Picking Helper & Pick Slip Processor - IR Footer OFFLINE FIX</title>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script>
-    // Firebase web configuration is public app metadata. Replace these values
-    // with the Web app configuration from the Store Apps Firebase project.
-    window.STORE_APPS_FIREBASE_CONFIG = {
-      apiKey: "FIREBASE_WEB_API_KEY",
-      authDomain: "FIREBASE_PROJECT_ID.firebaseapp.com",
-      projectId: "FIREBASE_PROJECT_ID",
-      appId: "FIREBASE_WEB_APP_ID"
-    };
-    document.documentElement.classList.add("auth-locked");
-  </script>
   <!-- ExcelJS CDN for style-enabled XLSX exports -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
   <!-- JSZip is used to enforce the Excel footer directly in worksheet XML. -->
@@ -173,42 +160,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .btn-zero { grid-column: span 2; aspect-ratio: auto; border-radius: 35px; justify-content: flex-start; padding-left: 22px; }
 
     .hidden { display: none !important; }
-    html.auth-locked body > :not(#storeAppsAuthGate) { display: none !important; }
-    #storeAppsAuthGate[hidden] { display: none !important; }
-    #storeAppsAuthGate {
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      padding: 20px; background: var(--bg);
-    }
-    #storeAppsAuthCard {
-      width: min(100%, 420px); padding: 24px; background: white; border: 1px solid var(--border);
-      border-radius: 14px; box-shadow: 0 8px 28px rgba(15, 23, 42, .12);
-    }
-    #storeAppsAuthCard h1 { font-size: 1.35rem; margin-bottom: 8px; }
-    #storeAppsAuthCard p { color: var(--muted); margin-bottom: 18px; }
-    #storeAppsAuthCard input { margin-bottom: 12px; }
-    #storeAppsLoginButton {
-      width: 100%; padding: 12px; border: 0; border-radius: 8px; color: white;
-      background: var(--primary); font-size: 1rem; font-weight: 700;
-    }
-    #storeAppsAuthError { color: #b91c1c; min-height: 1.2em; margin-top: 10px; }
-    html:not(.auth-locked) #storeAppsAuthGate { display: none !important; }
+
   </style>
 </head>
 <body>
 
-  <section id="storeAppsAuthGate" aria-label="Store Apps sign in">
-    <div id="storeAppsAuthCard">
-      <h1>Store Apps sign in</h1>
-      <p>Use your individual storekeeper account to continue.</p>
-      <form id="storeAppsLoginForm">
-        <label for="storeAppsEmail">Email</label>
-        <input id="storeAppsEmail" type="email" autocomplete="username" required>
-        <label for="storeAppsPassword">Password</label>
-        <input id="storeAppsPassword" type="password" autocomplete="current-password" required>
-        <button id="storeAppsLoginButton" type="submit">Sign in</button>
-      </form>
-      <div id="storeAppsAuthError" role="alert"></div>
-    </div>
   </section>
 
   <header>
@@ -2314,104 +2270,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       XLSX.writeFile(workbook, `HMC_Packaging_Database_${timestamp}.xlsx`);
     }
   </script>
-  <script>
-    (function () {
-      const gate = document.getElementById("storeAppsAuthGate");
-      const form = document.getElementById("storeAppsLoginForm");
-      const button = document.getElementById("storeAppsLoginButton");
-      const message = document.getElementById("storeAppsAuthError");
-      const appSessionKeys = [
-        "hmc_app_version", "hmc_pickList", "hmc_packagingDb", "hmc_currentIndex",
-        "hmc_locationMap", "hmc_moveOrderNum", "hmc_customerName", "hmc_rawHeaderMatrix",
-        "hmc_rawFooterRows", "hmc_originalColWidths", "hmc_originalMerges"
-      ];
-
-      function clearPickingSession() {
-        appSessionKeys.forEach((key) => sessionStorage.removeItem(key));
-        sessionStorage.removeItem("hmc_auth_uid");
-      }
-
-      function showError(text) {
-        message.textContent = text;
-      }
-
-      const config = window.STORE_APPS_FIREBASE_CONFIG;
-      if (!window.firebase || !config || config.apiKey === "FIREBASE_WEB_API_KEY" ||
-          config.projectId === "FIREBASE_PROJECT_ID" || config.appId === "FIREBASE_WEB_APP_ID") {
-        showError("Sign-in is not configured yet. Contact the app administrator.");
-        return;
-      }
-
-      try {
-        firebase.initializeApp(config);
-        const auth = firebase.auth();
-        let deniedAccess = false;
-        auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).then(() => {
-          auth.onAuthStateChanged((user) => {
-            if (!user) {
-              document.documentElement.classList.add("auth-locked");
-              gate.hidden = false;
-              document.getElementById("storeAppsSignOut")?.remove();
-              if (deniedAccess) {
-                showError("Your account does not have access to the HTML helper. Contact the administrator.");
-                deniedAccess = false;
-              }
-              return;
-            }
-
-            user.getIdTokenResult().then((tokenResult) => {
-              if (!tokenResult.claims.picking_helper) {
-                deniedAccess = true;
-                clearPickingSession();
-                auth.signOut();
-                return;
-              }
-
-              const priorUid = sessionStorage.getItem("hmc_auth_uid");
-              if (priorUid && priorUid !== user.uid) clearPickingSession();
-              sessionStorage.setItem("hmc_auth_uid", user.uid);
-              gate.hidden = true;
-              document.documentElement.classList.remove("auth-locked");
-
-              if (!document.getElementById("storeAppsSignOut")) {
-                const signOut = document.createElement("button");
-                signOut.id = "storeAppsSignOut";
-                signOut.className = "header-btn";
-                signOut.type = "button";
-                signOut.textContent = "Sign out";
-                signOut.addEventListener("click", async () => {
-                  clearPickingSession();
-                  await auth.signOut();
-                });
-                document.querySelector(".header-actions")?.appendChild(signOut);
-              }
-            }).catch(() => {
-              showError("Could not verify account access. Connect to the internet and sign in again.");
-              auth.signOut();
-            });
-          });
-        }).catch(() => showError("Could not initialize sign-in. Contact the app administrator."));
-
-        form.addEventListener("submit", async (event) => {
-          event.preventDefault();
-          button.disabled = true;
-          showError("");
-          try {
-            await auth.signInWithEmailAndPassword(
-              document.getElementById("storeAppsEmail").value.trim(),
-              document.getElementById("storeAppsPassword").value
-            );
-            form.reset();
-          } catch (error) {
-            showError("Sign-in failed. Check your email and password or contact the administrator.");
-          } finally {
-            button.disabled = false;
-          }
-        });
-      } catch (error) {
-        showError("Could not initialize sign-in. Contact the app administrator.");
-      }
-    })();
   </script>
 </body>
 </html>

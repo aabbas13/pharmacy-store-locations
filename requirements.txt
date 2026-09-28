@@ -2,5 +2,3 @@ streamlit
 gspread
 oauth2client
 google-auth
-firebase-admin
-requests
