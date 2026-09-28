@@ -160,12 +160,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .btn-zero { grid-column: span 2; aspect-ratio: auto; border-radius: 35px; justify-content: flex-start; padding-left: 22px; }
 
     .hidden { display: none !important; }
-
   </style>
 </head>
 <body>
-
-  </section>
 
   <header>
     <div class="header-title-box">
@@ -1401,6 +1398,43 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
           const parsedExp = formatExpiryDate(expIdx !== -1 ? row[expIdx] : 'N/A');
 
+          // Lot/Serial must stay text and preserve leading zeroes.
+          // Some source Excel files store a lot number as a numeric cell with
+          // a custom format such as 000000. In that case XLSX may expose the
+          // value as 1234 even though Excel displays 001234, so reconstruct
+          // the zero-padded value from the source cell's number format.
+          const lotCellAddress = lotIdx !== -1
+            ? XLSX.utils.encode_cell({ r: i, c: lotIdx })
+            : null;
+          const lotCell = lotCellAddress ? sheet[lotCellAddress] : null;
+
+          function getLotSerialText(cell, rawValue) {
+            if (cell && cell.t === 's' && cell.v !== undefined && cell.v !== null) {
+              return String(cell.v);
+            }
+
+            if (cell && typeof cell.v === 'number') {
+              const format = String(cell.z || '');
+              const integerFormat = format.split('.')[0];
+              const zeroMatch = integerFormat.match(/0+/);
+              if (zeroMatch && /^[0]+$/.test(integerFormat.replace(/[^0]/g, ''))) {
+                const width = integerFormat.replace(/[^0]/g, '').length;
+                return String(Math.trunc(cell.v)).padStart(width, '0');
+              }
+              return String(cell.w !== undefined ? cell.w : cell.v);
+            }
+
+            if (cell && cell.w !== undefined && cell.w !== null) {
+              return String(cell.w);
+            }
+
+            return rawValue !== undefined && rawValue !== null ? String(rawValue) : 'N/A';
+          }
+
+          const lotValue = lotIdx !== -1
+            ? getLotSerialText(lotCell, row[lotIdx])
+            : 'N/A';
+
           pickList.push({
             raw: row,
             line: lineIdx !== -1 ? (parseInt(row[lineIdx]) || (i - headerIdx)) : (i - headerIdx),
@@ -1408,7 +1442,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             name: descIdx !== -1 ? (row[descIdx] || 'N/A') : 'N/A',
             location: shelfLocation,
             locationMatched,
-            lot: lotIdx !== -1 ? (row[lotIdx] || 'N/A') : 'N/A',
+            lot: lotValue || 'N/A',
             expiry: parsedExp,
             uom: uomIdx !== -1 ? (row[uomIdx] || '') : '',
             requestedQty: qtyIdx !== -1 ? (parseInt(row[qtyIdx]) || 0) : 0,
@@ -1851,7 +1885,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         
         const statusText = isPending 
           ? "PENDING" 
-          : (isAdjusted ? "ADJUSTED" : "COMPLETED");
+          : (isAdjusted ? "ADJUSTED" : "✓");
 
         let remarks = item.comment || "";
         if (nearExp) {
@@ -1872,6 +1906,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           statusText,
           remarks
         ]);
+
+        // Keep Lot/Serial as text in the generated workbook so leading zeroes
+        // are preserved (for example, 001234 remains 001234).
+        const lotCell = row.getCell(5);
+        lotCell.value = String(item.lot ?? 'N/A');
+        lotCell.numFmt = '@';
+        lotCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
         // Auto-fit the row height to the Item Description (Column B).
         // Column B is wrapped, so estimate the number of wrapped lines from
@@ -2269,7 +2310,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const timestamp = getFormattedTimestamp();
       XLSX.writeFile(workbook, `HMC_Packaging_Database_${timestamp}.xlsx`);
     }
-  </script>
   </script>
 </body>
 </html>
