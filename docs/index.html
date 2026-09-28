@@ -1,400 +1,45 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0b57d0">
-<title>HMC Store Locations - OneDrive Test</title>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Google Sheets Location Master Test</title>
 <style>
-  :root { font-family: Arial, sans-serif; color: #1f2937; background:#f4f6f8; }
-  * { box-sizing:border-box; }
-  body { margin:0; padding:18px; }
-  .wrap { max-width:900px; margin:auto; }
-  .card { background:white; border-radius:14px; padding:18px; margin-bottom:14px; box-shadow:0 2px 10px rgba(0,0,0,.07); }
-  h1 { margin:0 0 6px; font-size:23px; }
-  h2 { font-size:17px; margin:0 0 12px; }
-  .muted { color:#6b7280; font-size:13px; }
-  button, input[type=file] { font:inherit; }
-  button { border:0; border-radius:10px; padding:12px 15px; margin:4px 4px 4px 0; cursor:pointer; background:#0b57d0; color:white; font-weight:600; }
-  button.secondary { background:#5f6368; }
-  button.danger { background:#b42318; }
-  button:disabled { opacity:.55; cursor:not-allowed; }
-  .status { padding:13px; border-radius:10px; background:#eef2f7; white-space:pre-wrap; line-height:1.45; }
-  .ok { background:#e9f7ef; }
-  .warn { background:#fff7df; }
-  .bad { background:#fdecec; }
-  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-  .metric { background:#f8fafc; padding:13px; border-radius:10px; }
-  .metric b { display:block; font-size:21px; margin-top:3px; }
-  code { word-break:break-all; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { padding:8px; border-bottom:1px solid #e5e7eb; text-align:left; vertical-align:top; }
-  th { background:#f8fafc; }
-  .small { font-size:12px; }
-  @media(max-width:650px){ body{padding:10px}.grid{grid-template-columns:1fr}button{width:100%;margin-right:0} }
+:root{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#17212b;background:#f4f7fa;--card:#fff;--line:#d9e1e8;--muted:#5e6c78;--accent:#1769aa;--good:#197344;--bad:#b42318;--warn:#8a5700}
+@media(prefers-color-scheme:dark){:root{color:#e8edf2;background:#111820;--card:#1b2630;--line:#35434f;--muted:#adbac6;--accent:#80c1ff;--good:#67d798;--bad:#ff887e;--warn:#ffd16c}}
+*{box-sizing:border-box}body{margin:0;padding:clamp(14px,4vw,36px)}main{max-width:900px;margin:auto}h1{font-size:clamp(1.45rem,4vw,2rem);line-height:1.2;margin:.1em 0 .35em}.intro{color:var(--muted);margin:0 0 1.2rem}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:clamp(16px,3vw,24px);margin:14px 0;box-shadow:0 3px 14px #0000000b}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}button{font:inherit;font-weight:650;border:0;border-radius:9px;padding:11px 16px;cursor:pointer;background:var(--accent);color:white;min-height:44px}button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}button:disabled{opacity:.6;cursor:wait}.status{font-weight:700}.status.good{color:var(--good)}.status.bad{color:var(--bad)}.status.warn{color:var(--warn)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px}.field{padding:11px;border-radius:9px;background:color-mix(in srgb,var(--card),var(--line) 32%);overflow-wrap:anywhere}.label{font-size:.82rem;color:var(--muted);display:block}.value{font-weight:600}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:9px 7px;overflow-wrap:anywhere}th{font-size:.88rem;color:var(--muted)}.tablewrap{overflow:auto}details{margin-top:12px}summary{cursor:pointer;font-weight:650}.note{font-size:.9rem;color:var(--muted)}.error{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--bad)}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:.82rem;color:var(--muted)}
 </style>
 </head>
-<body>
-<div class="wrap">
-  <div class="card">
-    <h1>HMC Store Locations — OneDrive Test</h1>
-    <div class="muted">Tests the HMC-shared Location Master, local IndexedDB caching, and change detection.</div>
-  </div>
-
-  <div class="card">
-    <h2>1. OneDrive source</h2>
-    <div class="small"><b>Configured sharing link:</b></div>
-    <p><code id="sourceUrl"></code></p>
-    <button id="openBtn" class="secondary">Open HMC OneDrive</button>
-    <button id="loadBtn">Refresh from HMC OneDrive</button>
-  </div>
-
-  <div class="card">
-    <h2>2. If automatic loading is blocked</h2>
-    <div class="muted">After Microsoft/HMC authentication and downloading the latest workbook, choose it here. The application imports it and saves the Location Master locally for offline use.</div>
-    <p><input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.csv"></p>
-  </div>
-
-  <div class="card">
-    <h2>Recommended refresh workflow</h2>
-    <div class="status">
-      <b>Refresh from HMC OneDrive</b><br>
-      The page opens your HMC SharePoint file in a separate tab. Microsoft handles
-      HMC authentication normally. This application never asks for or stores your
-      Microsoft password.<br><br>
-      After downloading the latest workbook, return here and select it. The new
-      Location Master is fingerprinted, compared with the previous local master,
-      and saved into IndexedDB.
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>3. Current status</h2>
-    <div id="status" class="status">Ready.</div>
-  </div>
-
-  <div class="card">
-    <h2>5. Location Master</h2>
-    <div class="grid">
-      <div class="metric">Source<b id="sourceState">—</b></div>
-      <div class="metric">Items<b id="itemCount">—</b></div>
-      <div class="metric">Location records<b id="locationCount">—</b></div>
-      <div class="metric">Local cache<b id="cacheState">—</b></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>6. Change detection</h2>
-    <div id="changeStatus" class="status">No comparison yet.</div>
-    <div id="changesWrap" style="display:none;margin-top:12px">
-      <table>
-        <thead><tr><th>Item Code</th><th>Previous Location</th><th>Current Location</th></tr></thead>
-        <tbody id="changesBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>7. Local cache controls</h2>
-    <button id="refreshCacheBtn" class="secondary">Show Cached Master</button>
-    <button id="clearBtn" class="danger">Clear Local Location Cache</button>
-    <div class="muted" style="margin-top:8px">
-      The cache is stored in this browser/device and survives refresh, closing the browser, and restarting the device.
-    </div>
-  </div>
-</div>
-
+<body><main>
+<h1>Google Sheets Location Master test</h1>
+<p class="intro">Checks whether this browser can read the configured sheet without signing in, then saves successful results on this device for offline viewing.</p>
+<section class="card"><div><span class="label">Connection status</span><span id="status" class="status">Ready to connect</span></div><div id="message" class="note" aria-live="polite">Press Refresh to try an anonymous Google Sheets read.</div><div class="actions"><button id="refresh">Refresh sheet</button><button id="clear" class="secondary">Clear offline cache</button></div></section>
+<section class="card"><h2>Latest successful data</h2><div class="grid"><div class="field"><span class="label">Detected tab</span><span id="tab" class="value">—</span></div><div class="field"><span class="label">Data rows</span><span id="count" class="value">—</span></div><div class="field"><span class="label">Last successful refresh</span><span id="time" class="value">—</span></div><div class="field"><span class="label">Data fingerprint</span><span id="fingerprint" class="value">—</span></div></div><div id="records"></div><p id="cacheInfo" class="note"></p></section>
+<section class="card"><h2>Access notes</h2><p class="note">This page does not ask for, transmit, or store a password. It uses only anonymous Google endpoints. If the sheet is private, Google normally returns a sign-in/access page instead of sheet data. Make it readable to anyone with the link or publish it only if that access level is acceptable for the data.</p><p class="note">Some browsers block cross-origin reads or local-file requests. If the page reports a browser access block, host this HTML on HTTPS (for example, GitHub Pages) and try again. A successful read may use an anonymous Google endpoint; this test does not change sharing settings.</p><details><summary>Technical diagnostics</summary><p id="diagnostic" class="note">No request has been made.</p></details></section>
+</main>
 <script>
-const ONEDRIVE_SHARE_URL =
-  "https://hamadqa-my.sharepoint.com/:x:/g/personal/aabbas13_hamad_qa/IQDOu1ysIgG3R5yxtEFLp8MoAc1zfLKJBtLZq9jPM-dogdA?e=VhTuwx";
-
-const DB_NAME = "HMCStoreLocationsTest";
-const DB_VERSION = 1;
-const STORE = "locationMaster";
-
-const $ = id => document.getElementById(id);
-$("sourceUrl").textContent = ONEDRIVE_SHARE_URL;
-
-function setStatus(text, kind="") {
-  $("status").textContent = text;
-  $("status").className = "status " + kind;
-}
-function setChange(text, kind="") {
-  $("changeStatus").textContent = text;
-  $("changeStatus").className = "status " + kind;
-}
-
-function openDB() {
-  return new Promise((resolve,reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, {keyPath:"id"});
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function dbGet() {
-  const db = await openDB();
-  return new Promise((resolve,reject) => {
-    const tx = db.transaction(STORE,"readonly");
-    const req = tx.objectStore(STORE).get("master");
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function dbPut(value) {
-  const db = await openDB();
-  return new Promise((resolve,reject) => {
-    const tx = db.transaction(STORE,"readwrite");
-    tx.objectStore(STORE).put(value);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function dbClear() {
-  const db = await openDB();
-  return new Promise((resolve,reject) => {
-    const tx = db.transaction(STORE,"readwrite");
-    tx.objectStore(STORE).clear();
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-function normalize(v) {
-  return String(v ?? "").trim();
-}
-
-function parseWorkbook(arrayBuffer, filename) {
-  const wb = XLSX.read(arrayBuffer, {type:"array", cellDates:false, raw:false});
-  const sheetName = wb.SheetNames.find(n => /store\s*locations?/i.test(n)) || wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, {defval:"", raw:false});
-
-  if (!rows.length) throw new Error("No data rows were found.");
-
-  const headers = Object.keys(rows[0]);
-  const itemHeader = headers.find(h => /^item\s*code$/i.test(normalize(h))) ||
-                      headers.find(h => /item.*code/i.test(normalize(h)));
-  const locationHeader = headers.find(h => /^location$/i.test(normalize(h))) ||
-                         headers.find(h => /location/i.test(normalize(h)));
-
-  if (!itemHeader || !locationHeader) {
-    throw new Error(
-      "Could not find the expected columns. Found: " + headers.join(", ")
-    );
-  }
-
-  const map = new Map();
-  let records = 0;
-
-  for (const row of rows) {
-    const item = normalize(row[itemHeader]);
-    const location = normalize(row[locationHeader]);
-    if (!item) continue;
-    if (!map.has(item)) map.set(item, []);
-    if (location && !map.get(item).includes(location)) map.get(item).push(location);
-    records++;
-  }
-
-  for (const [item, locations] of map) locations.sort();
-
-  const normalized = {};
-  [...map.keys()].sort().forEach(item => normalized[item] = map.get(item));
-
-  return {
-    id:"master",
-    filename,
-    sheetName,
-    itemHeader,
-    locationHeader,
-    itemCount:Object.keys(normalized).length,
-    locationCount:Object.values(normalized).reduce((n,a)=>n+a.length,0),
-    data:normalized,
-    fingerprint:hashObject(normalized),
-    savedAt:new Date().toISOString()
-  };
-}
-
-function hashObject(obj) {
-  const text = JSON.stringify(obj);
-  let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
-  for (let i=0;i<text.length;i++) {
-    const c=text.charCodeAt(i);
-    h1 ^= c; h1 = Math.imul(h1,16777619);
-    h2 ^= c; h2 = Math.imul(h2,2246822519);
-  }
-  return (h1>>>0).toString(16).padStart(8,"0") + (h2>>>0).toString(16).padStart(8,"0");
-}
-
-function compareMasters(oldM, newM) {
-  const oldD = oldM?.data || {};
-  const newD = newM?.data || {};
-  const codes = new Set([...Object.keys(oldD),...Object.keys(newD)]);
-  const changes = [];
-  for (const code of [...codes].sort()) {
-    const a = (oldD[code] || []).join(" | ");
-    const b = (newD[code] || []).join(" | ");
-    if (a !== b) changes.push({
-      item:code,
-      previous:a || "(not present)",
-      current:b || "(not present)"
-    });
-  }
-  return changes;
-}
-
-function displayMaster(master, sourceLabel) {
-  $("sourceState").textContent = sourceLabel;
-  $("itemCount").textContent = master.itemCount.toLocaleString();
-  $("locationCount").textContent = master.locationCount.toLocaleString();
-  $("cacheState").textContent = "Saved";
-}
-
-async function processWorkbook(buffer, filename, sourceLabel) {
-  setStatus("Reading workbook and building the Location Master…");
-  const newMaster = parseWorkbook(buffer, filename);
-  const oldMaster = await dbGet();
-  const changes = oldMaster ? compareMasters(oldMaster, newMaster) : [];
-
-  await dbPut(newMaster);
-  displayMaster(newMaster, sourceLabel);
-
-  if (!oldMaster) {
-    setChange(
-      "First Location Master loaded.\n" +
-      `${newMaster.itemCount.toLocaleString()} items / ${newMaster.locationCount.toLocaleString()} location records were cached locally.`,
-      "ok"
-    );
-  } else if (!changes.length) {
-    setChange(
-      "No location-data changes detected.\n" +
-      "The new workbook has the same Item Code → Location data as the cached master.",
-      "ok"
-    );
-  } else {
-    setChange(
-      `${changes.length.toLocaleString()} item code(s) changed.\n` +
-      "The new master has been saved to IndexedDB.",
-      "warn"
-    );
-  }
-
-  const body = $("changesBody");
-  body.innerHTML = "";
-  const maxRows = Math.min(changes.length, 250);
-  for (let i=0;i<maxRows;i++) {
-    const c = changes[i];
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      `<td>${escapeHtml(c.item)}</td>` +
-      `<td>${escapeHtml(c.previous)}</td>` +
-      `<td>${escapeHtml(c.current)}</td>`;
-    body.appendChild(tr);
-  }
-  $("changesWrap").style.display = changes.length ? "block" : "none";
-
-  setStatus(
-    `SUCCESS\n\n` +
-    `Source: ${sourceLabel}\n` +
-    `File: ${filename}\n` +
-    `Sheet: ${newMaster.sheetName}\n` +
-    `Items: ${newMaster.itemCount.toLocaleString()}\n` +
-    `Location records: ${newMaster.locationCount.toLocaleString()}\n` +
-    `Fingerprint: ${newMaster.fingerprint}\n` +
-    `Saved: ${new Date(newMaster.savedAt).toLocaleString()}`,
-    "ok"
-  );
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-  }[c]));
-}
-
-$("openBtn").onclick = () => window.open(ONEDRIVE_SHARE_URL, "_blank", "noopener");
-
-$("fileInput").onchange = async e => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try {
-    const buffer = await file.arrayBuffer();
-    await processWorkbook(buffer, file.name, "HMC OneDrive download");
-  } catch (err) {
-    console.error(err);
-    setStatus("FAILED\n\n" + (err.message || err), "bad");
-  }
-};
-
-$("loadBtn").onclick = async () => {
-  // Open the protected SharePoint sharing page interactively.
-  // Microsoft handles HMC authentication; this page never collects credentials.
-  setStatus(
-    "Opening the HMC OneDrive Location Master…\\n\\n" +
-    "1. Sign in with your HMC Microsoft account if Microsoft asks.\\n" +
-    "2. Download the Excel workbook.\\n" +
-    "3. Return to this page and choose the downloaded workbook below.",
-    "warn"
-  );
-  window.open(ONEDRIVE_SHARE_URL, "_blank", "noopener,noreferrer");
-};
-
-$("refreshCacheBtn").onclick = async () => {
-  try {
-    const m = await dbGet();
-    if (!m) {
-      $("cacheState").textContent = "Empty";
-      setStatus("No Location Master is currently cached on this device.", "warn");
-      return;
-    }
-    displayMaster(m, "IndexedDB cache");
-    setStatus(
-      `CACHED MASTER\n\nFile: ${m.filename}\nSheet: ${m.sheetName}\n` +
-      `Items: ${m.itemCount.toLocaleString()}\n` +
-      `Location records: ${m.locationCount.toLocaleString()}\n` +
-      `Fingerprint: ${m.fingerprint}\n` +
-      `Saved: ${new Date(m.savedAt).toLocaleString()}`,
-      "ok"
-    );
-  } catch(err) {
-    setStatus("Cache read failed: " + err.message, "bad");
-  }
-};
-
-$("clearBtn").onclick = async () => {
-  if (!confirm("Clear the locally cached Location Master?")) return;
-  await dbClear();
-  $("sourceState").textContent = "—";
-  $("itemCount").textContent = "—";
-  $("locationCount").textContent = "—";
-  $("cacheState").textContent = "Empty";
-  setChange("Cache cleared. No comparison is currently available.");
-  setStatus("Local Location Master cache cleared.", "ok");
-};
-
-(async function init() {
-  try {
-    const m = await dbGet();
-    if (m) {
-      displayMaster(m, "IndexedDB cache");
-      setStatus(
-        `A cached Location Master is available.\n` +
-        `${m.itemCount.toLocaleString()} items / ${m.locationCount.toLocaleString()} location records.\n` +
-        `Last saved: ${new Date(m.savedAt).toLocaleString()}`,
-        "ok"
-      );
-    }
-  } catch(e) {
-    console.warn(e);
-  }
+(()=>{
+'use strict';
+const SHEET_ID='1Zxlt-mEVGEnufk6rb_tI3BUxg2ZLGcmE4I63wUYItnE';
+const DB_NAME='location-master-sheet-test-v1', STORE='datasets', KEY='latest';
+const statusEl=document.getElementById('status'), messageEl=document.getElementById('message');
+const diagnosticEl=document.getElementById('diagnostic');
+const setStatus=(kind,title,message,diag='')=>{statusEl.className='status '+kind;statusEl.textContent=title;messageEl.textContent=message;if(diag)diagnosticEl.textContent=diag;};
+const openDb=()=>new Promise((resolve,reject)=>{if(!('indexedDB'in window)){reject(new Error('IndexedDB is unavailable in this browser context.'));return}const req=indexedDB.open(DB_NAME,1);req.onupgradeneeded=()=>req.result.createObjectStore(STORE);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error||new Error('Could not open IndexedDB'));});
+const dbGet=async()=>{const db=await openDb();return new Promise((resolve,reject)=>{const r=db.transaction(STORE).objectStore(STORE).get(KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error);r.onsuccess=()=>{resolve(r.result||null);db.close()};});};
+const dbPut=async data=>{const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).put(data,KEY);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error||new Error('Cache write failed'))};});};
+const dbClear=async()=>{const db=await openDb();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).delete(KEY);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)};});};
+function fnv64(text){let h=0xcbf29ce484222325n;for(const byte of new TextEncoder().encode(text)){h^=BigInt(byte);h=BigInt.asUintN(64,h*0x100000001b3n)}return h.toString(16).padStart(16,'0')}
+function parseCsv(s){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<s.length;i++){const c=s[i];if(quoted){if(c==='"'&&s[i+1]==='"'){cell+='"';i++}else if(c==='"')quoted=false;else cell+=c}else if(c==='"')quoted=true;else if(c===','){row.push(cell);cell=''}else if(c==='\n'){row.push(cell.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}else cell+=c}if(quoted)throw new Error('CSV ended inside a quoted field.');row.push(cell.replace(/\r$/,''));if(row.some(x=>x.trim()))rows.push(row);return rows}
+function findColumns(rows){if(!rows.length)throw new Error('The sheet returned no rows.');const norm=x=>String(x||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');let hi=-1,ii=-1,li=-1;for(let r=0;r<Math.min(rows.length,15);r++){const vals=rows[r].map(norm);const a=vals.findIndex(v=>['itemcode','itemnumber','item'].includes(v));const b=vals.findIndex(v=>['location','storelocation','binlocation'].includes(v));if(a>=0&&b>=0){hi=r;ii=a;li=b;break}}if(hi<0)throw new Error('Could not find Item Code and Location column headers in the first 15 rows.');const records=[];for(const r of rows.slice(hi+1)){const item=String(r[ii]??'').trim(),location=String(r[li]??'').trim();if(item||location)records.push({itemCode:item,location})}return{records,headerRow:hi+1}}
+function gvizRows(raw){const match=raw.match(/google\.visualization\.Query\.setResponse\(([\s\S]*?)\);?\s*$/);if(!match)throw new Error('The response was not Google Sheets visualization data (it may be a sign-in or permission page).');const obj=JSON.parse(match[1]);if(obj.status==='error')throw new Error((obj.errors||[]).map(e=>e.detailed_message||e.message).join('; ')||'Google Sheets returned an error.');const cols=(obj.table?.cols||[]).map(c=>c.label||c.id||'');const data=(obj.table?.rows||[]).map(r=>(r.c||[]).map(c=>c?.f??c?.v??''));if(cols.length)data.unshift(cols);return data}
+async function fetchSheet(){const urls=[`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`,`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`];let errors=[];for(let i=0;i<urls.length;i++){try{const response=await fetch(urls[i],{method:'GET',mode:'cors',credentials:'omit',cache:'no-store',redirect:'follow'});if(!response.ok)throw new Error(`HTTP ${response.status} ${response.statusText}`);const body=await response.text();if(/accounts\.google\.com|ServiceLogin|Sign in to continue|You need access/i.test(body.slice(0,6000)))throw new Error('Google returned a sign-in or access-denied page. The sheet is private or not anonymously readable.');const rows=i===0?parseCsv(body):gvizRows(body);const parsed=findColumns(rows);if(!parsed.records.length)throw new Error('Headers were found but no Item Code/Location records were returned.');return{...parsed,tab:i===0?'First tab (CSV export; tab name not exposed)':'First tab (Google Visualization endpoint; tab name not exposed)',endpoint:i===0?'CSV export':'gviz JSON',url:urls[i]};}catch(e){errors.push(`${i===0?'CSV export':'gviz endpoint'}: ${e.message||e}`)}}throw new Error(errors.join('\n'));}
+function render(data){document.getElementById('tab').textContent=data.tab;document.getElementById('count').textContent=data.records.length.toLocaleString();document.getElementById('time').textContent=new Date(data.refreshedAt).toLocaleString();document.getElementById('fingerprint').textContent=`FNV-1a 64: ${data.fingerprint}`;const container=document.getElementById('records');const shown=data.records.slice(0,8);container.innerHTML='';if(!shown.length){container.textContent='No records';return}const wrap=document.createElement('div');wrap.className='tablewrap';const table=document.createElement('table');table.innerHTML='<thead><tr><th>Item Code</th><th>Location</th></tr></thead>';const tbody=document.createElement('tbody');for(const rec of shown){const tr=document.createElement('tr');for(const val of [rec.itemCode,rec.location]){const td=document.createElement('td');td.textContent=val;tr.appendChild(td)}tbody.appendChild(tr)}table.appendChild(tbody);wrap.appendChild(table);container.appendChild(wrap);}
+async function loadCache(){try{const cached=await dbGet();if(cached){render(cached);document.getElementById('cacheInfo').textContent='Showing the last successful dataset saved in IndexedDB on this device. It remains available offline.';return true}document.getElementById('cacheInfo').textContent='No saved dataset on this device yet.';return false}catch(e){document.getElementById('cacheInfo').textContent='Offline cache unavailable: '+e.message;return false}}
+async function refresh(){const button=document.getElementById('refresh');button.disabled=true;setStatus('', 'Connecting…','Trying anonymous Google Sheets CSV, then gviz.');try{const result=await fetchSheet();const canonical=JSON.stringify(result.records.map(r=>[r.itemCode,r.location]));const data={...result,refreshedAt:new Date().toISOString(),fingerprint:fnv64(canonical)};await dbPut(data);render(data);document.getElementById('cacheInfo').textContent='Latest successful dataset is saved in IndexedDB for offline viewing.';setStatus('good','Connected',`${result.records.length.toLocaleString()} records read successfully via ${result.endpoint}.`);diagnosticEl.textContent=`Endpoint: ${result.url}\nHeaders located on row ${result.headerRow}. The endpoint does not expose the tab title, so the data is identified as the first tab.`;}catch(e){const cached=await loadCache();const msg=e.message||String(e);const privateLikely=/private|access-denied|sign-in|need access|HTTP 401|HTTP 403|HTML/i.test(msg);setStatus(privateLikely?'warn':'bad',privateLikely?'Not anonymously readable':'Connection failed',privateLikely?'Google appears to require sign-in or sheet access. Confirm the sheet sharing settings; this page does not change them.':'Could not read the sheet. If this is a CORS/browser block, try serving this HTML from an HTTPS website.',msg+(cached?'\n\nShowing cached data below.':'\n\nNo cached dataset is available yet.'));}finally{button.disabled=false}}
+document.getElementById('refresh').addEventListener('click',refresh);document.getElementById('clear').addEventListener('click',async()=>{try{await dbClear();document.getElementById('cacheInfo').textContent='Offline cache cleared from this browser.';document.getElementById('tab').textContent='—';document.getElementById('count').textContent='—';document.getElementById('time').textContent='—';document.getElementById('fingerprint').textContent='—';document.getElementById('records').replaceChildren();setStatus('', 'Cache cleared','Saved offline dataset removed.')}catch(e){setStatus('bad','Could not clear cache',e.message)}});
+loadCache().then(found=>{if(found)setStatus('', 'Offline data available','Press Refresh to check the live Google Sheet; cached rows are currently shown.')});
 })();
 </script>
-</body>
-</html>
+</body></html>
