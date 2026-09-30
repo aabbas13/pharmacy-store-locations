@@ -179,6 +179,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button type="button" id="refreshGoogleLocations" style="background:#12665b; color:white;">↻ Refresh Location Master</button>
     <small id="googleLocationStatus" role="status" aria-live="polite" style="font-size:0.8rem; flex:1; min-width:190px;">Checking saved location data…</small>
     <small style="color:#52645d; font-size:0.72rem; width:100%;">Uses the HMC Google Sheet anonymously; the last successful copy is saved on this device for offline use. Excel import remains available.</small>
+    <small id="sessionPersistenceStatus" role="status" aria-live="polite" style="font-size:0.72rem; width:100%; color:#52645d;">Pick progress saves automatically on this device, keyed by pick-slip cell D2.</small>
   </div>
 
   <div id="uploadCard" class="card">
@@ -197,6 +198,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div class="file-group">
       <label for="pickSlipFile">3. Pick Slip Report (.xls / .xlsx)</label>
       <input type="file" id="pickSlipFile" accept=".xlsx, .xls">
+    </div>
+
+    <div class="file-group" style="border:1px solid #cbd5e1; padding:12px; border-radius:10px; margin-top:12px;">
+      <label style="font-weight:bold;">Resume a saved pick session</label>
+      <small style="display:block; margin:4px 0 8px; color:#64748b;">Sessions are saved on this device using the identifier in cell D2 of the original pick slip.</small>
+      <button type="button" class="header-btn" onclick="renderSavedSessionsList()" style="width:auto; margin-bottom:8px;">↻ Refresh saved sessions</button>
+      <div id="savedSessionsList" role="list" aria-live="polite">Loading saved sessions…</div>
     </div>
 
     <!-- Sorting Configuration -->
@@ -521,9 +529,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <script>
     let locationMap = {};
+    // Keep the imported master rows and columns for full-column location exports.
+    let locationMasterRows = [];
+    let locationMasterHeaders = [];
+    let locationMasterSheetName = 'Store Locations';
     let pickList = [];
     let packagingDb = {};
     let currentIndex = 0;
+    let sessionId = '';
+    let sessionSaveTimer = null;
+    const HMC_SESSION_DB = 'hmc-picking-sessions-v1';
+    const HMC_SESSION_STORE = 'sessions';
 
     // Header Details, Column Widths, Merges, & Footer Signature Data Storage
     // Versioned session key prevents older app versions from restoring stale
@@ -548,6 +564,190 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const min = String(d.getMinutes()).padStart(2, '0');
       return `${dd}${mm}${yyyy} ${hh}${min}`;
     }
+
+    function openHmcSessionDb() {
+      return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return reject(new Error('Persistent browser storage is not available.'));
+        const request = indexedDB.open(HMC_SESSION_DB, 1);
+        request.onupgradeneeded = () => {
+          if (!request.result.objectStoreNames.contains(HMC_SESSION_STORE)) request.result.createObjectStore(HMC_SESSION_STORE);
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('Could not open saved sessions.'));
+      });
+    }
+
+    function normalizedSessionKey(value) { return String(value ?? '').trim().toUpperCase(); }
+
+    function snapshotCurrentSession() {
+      return {
+        schemaVersion: 1,
+        sessionId: String(sessionId).trim(),
+        savedAt: new Date().toISOString(),
+        pickList, packagingDb, currentIndex, locationMap, locationMasterRows,
+        locationMasterHeaders, locationMasterSheetName, moveOrderNum, customerName,
+        rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges
+      };
+    }
+
+    async function persistCurrentSession() {
+      if (!sessionId || !Array.isArray(pickList) || !pickList.length) return;
+      const db = await openHmcSessionDb();
+      const snapshot = snapshotCurrentSession();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(HMC_SESSION_STORE, 'readwrite');
+        tx.objectStore(HMC_SESSION_STORE).put(snapshot, normalizedSessionKey(sessionId));
+        tx.oncomplete = () => {
+          db.close();
+          const status = document.getElementById('sessionPersistenceStatus');
+          if (status) {
+            status.textContent = `Progress saved · D2 ${sessionId} · ${new Date(snapshot.savedAt).toLocaleTimeString()}`;
+            status.style.color = '#167344';
+          }
+          renderSavedSessionsList();
+          resolve();
+        };
+        tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save picking progress.')); };
+      });
+    }
+
+    function schedulePersistentSessionSave() {
+      if (!sessionId || !Array.isArray(pickList) || !pickList.length) return;
+      if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+      sessionSaveTimer = setTimeout(() => {
+        sessionSaveTimer = null;
+        persistCurrentSession().catch(error => {
+          const status = document.getElementById('sessionPersistenceStatus');
+          if (status) {
+            status.textContent = `Could not save progress to this device: ${error.message || error}`;
+            status.style.color = '#b42318';
+          }
+          console.warn('Could not persist picking session:', error);
+        });
+      }, 150);
+    }
+
+    async function loadPersistentSession(identifier) {
+      const db = await openHmcSessionDb();
+      return new Promise((resolve, reject) => {
+        const request = db.transaction(HMC_SESSION_STORE).objectStore(HMC_SESSION_STORE).get(normalizedSessionKey(identifier));
+        request.onsuccess = () => { db.close(); resolve(request.result || null); };
+        request.onerror = () => { db.close(); reject(request.error || new Error('Could not read saved picking progress.')); };
+      });
+    }
+
+    async function listPersistentSessions() {
+      const db = await openHmcSessionDb();
+      return new Promise((resolve, reject) => {
+        const request = db.transaction(HMC_SESSION_STORE).objectStore(HMC_SESSION_STORE).getAll();
+        request.onsuccess = () => {
+          db.close();
+          resolve((request.result || []).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))));
+        };
+        request.onerror = () => { db.close(); reject(request.error || new Error('Could not list saved sessions.')); };
+      });
+    }
+
+    async function deletePersistentSession(identifier) {
+      const db = await openHmcSessionDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(HMC_SESSION_STORE, 'readwrite');
+        tx.objectStore(HMC_SESSION_STORE).delete(normalizedSessionKey(identifier));
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not delete this saved session.')); };
+      });
+    }
+
+    function activateSavedSessionView() {
+      document.getElementById('uploadCard').classList.add('hidden');
+      document.getElementById('viewToggleCard').classList.remove('hidden');
+      document.getElementById('pickerCard').classList.remove('hidden');
+      document.getElementById('navGroup').classList.remove('hidden');
+      updateHeaderDisplay();
+      renderCurrentItem();
+      renderSummaryTable();
+    }
+
+    async function restorePersistentSession(saved) {
+      sessionId = saved.sessionId || '';
+      pickList = saved.pickList || [];
+      packagingDb = saved.packagingDb || {};
+      locationMap = saved.locationMap || {};
+      locationMasterRows = saved.locationMasterRows || [];
+      locationMasterHeaders = saved.locationMasterHeaders || [];
+      locationMasterSheetName = saved.locationMasterSheetName || 'Store Locations';
+      currentIndex = Math.max(0, Math.min(Number(saved.currentIndex) || 0, pickList.length - 1));
+      moveOrderNum = saved.moveOrderNum || 'UNKNOWN_MO';
+      customerName = saved.customerName || 'UNKNOWN_CUSTOMER';
+      rawHeaderMatrix = saved.rawHeaderMatrix || [];
+      rawFooterRows = saved.rawFooterRows || [];
+      irFooterRow = saved.irFooterRow || [];
+      originalColWidths = saved.originalColWidths || [];
+      originalMerges = saved.originalMerges || [];
+      saveSessionState();
+      activateSavedSessionView();
+    }
+
+    async function resumePersistentSession(identifier) {
+      try {
+        const saved = await loadPersistentSession(identifier);
+        if (!saved || !Array.isArray(saved.pickList) || !saved.pickList.length) {
+          alert('That saved session could not be found. Refresh the saved-session list and try again.');
+          renderSavedSessionsList();
+          return;
+        }
+        await restorePersistentSession(saved);
+      } catch (error) {
+        alert(`Could not resume this saved session: ${error.message || error}`);
+      }
+    }
+
+    async function renderSavedSessionsList() {
+      const host = document.getElementById('savedSessionsList');
+      if (!host) return;
+      host.textContent = 'Loading saved sessions…';
+      try {
+        const sessions = await listPersistentSessions();
+        host.replaceChildren();
+        if (!sessions.length) { host.textContent = 'No saved pick sessions on this device yet.'; return; }
+        for (const saved of sessions.slice(0, 20)) {
+          const card = document.createElement('div');
+          card.setAttribute('role', 'listitem');
+          card.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #e2e8f0;flex-wrap:wrap;';
+          const info = document.createElement('div');
+          const picked = (saved.pickList || []).filter(item => item.itemPicked).length;
+          const total = (saved.pickList || []).length;
+          const identifier = document.createElement('strong');
+          identifier.textContent = `D2: ${saved.sessionId || 'Unknown identifier'}`;
+          const details = document.createElement('small');
+          details.style.cssText = 'display:block;color:#64748b;';
+          details.textContent = `${picked}/${total} picked · saved ${saved.savedAt ? new Date(saved.savedAt).toLocaleString() : 'time unknown'}`;
+          info.append(identifier, details);
+          const resume = document.createElement('button');
+          resume.type = 'button';
+          resume.className = 'header-btn';
+          resume.textContent = 'Resume';
+          resume.addEventListener('click', () => resumePersistentSession(saved.sessionId));
+          card.append(info, resume);
+          host.append(card);
+        }
+      } catch (error) {
+        host.textContent = `Saved sessions are unavailable: ${error.message || error}`;
+      }
+    }
+
+    window.addEventListener('pagehide', () => {
+      if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+      sessionSaveTimer = null;
+      persistCurrentSession().catch(error => console.warn('Final session save failed:', error));
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+        sessionSaveTimer = null;
+        persistCurrentSession().catch(error => console.warn('Background session save failed:', error));
+      }
+    });
 
     function isNearExpiry(expiryVal) {
       if (!expiryVal || expiryVal === 'N/A') return false;
@@ -584,17 +784,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           'hmc_packagingDb',
           'hmc_currentIndex',
           'hmc_locationMap',
+          'hmc_locationMasterRows',
+          'hmc_locationMasterHeaders',
+          'hmc_locationMasterSheetName',
           'hmc_moveOrderNum',
           'hmc_customerName',
           'hmc_rawHeaderMatrix',
           'hmc_rawFooterRows',
           'hmc_originalColWidths',
-          'hmc_originalMerges'
+          'hmc_originalMerges',
+          'hmc_sessionId'
         ].forEach(key => sessionStorage.removeItem(key));
         sessionStorage.setItem('hmc_app_version', HMC_APP_VERSION);
       }
       restoreSessionState();
       restoreGoogleLocationCache();
+      renderSavedSessionsList();
       setupCalcKeyboardListeners();
     });
 
@@ -604,12 +809,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_packagingDb', JSON.stringify(packagingDb));
       sessionStorage.setItem('hmc_currentIndex', currentIndex);
       sessionStorage.setItem('hmc_locationMap', JSON.stringify(locationMap));
+      sessionStorage.setItem('hmc_locationMasterRows', JSON.stringify(locationMasterRows));
+      sessionStorage.setItem('hmc_locationMasterHeaders', JSON.stringify(locationMasterHeaders));
+      sessionStorage.setItem('hmc_locationMasterSheetName', locationMasterSheetName);
       sessionStorage.setItem('hmc_moveOrderNum', moveOrderNum);
       sessionStorage.setItem('hmc_customerName', customerName);
       sessionStorage.setItem('hmc_rawHeaderMatrix', JSON.stringify(rawHeaderMatrix));
       sessionStorage.setItem('hmc_rawFooterRows', JSON.stringify(rawFooterRows));
       sessionStorage.setItem('hmc_originalColWidths', JSON.stringify(originalColWidths));
       sessionStorage.setItem('hmc_originalMerges', JSON.stringify(originalMerges));
+      sessionStorage.setItem('hmc_sessionId', sessionId);
+      schedulePersistentSessionSave();
     }
 
     function restoreSessionState() {
@@ -617,16 +827,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedPkg = sessionStorage.getItem('hmc_packagingDb');
       const savedIdx = sessionStorage.getItem('hmc_currentIndex');
       const savedLoc = sessionStorage.getItem('hmc_locationMap');
+      const savedLocationRows = sessionStorage.getItem('hmc_locationMasterRows');
+      const savedLocationHeaders = sessionStorage.getItem('hmc_locationMasterHeaders');
+      const savedLocationSheet = sessionStorage.getItem('hmc_locationMasterSheetName');
       const savedMo = sessionStorage.getItem('hmc_moveOrderNum');
       const savedCust = sessionStorage.getItem('hmc_customerName');
       const savedHeader = sessionStorage.getItem('hmc_rawHeaderMatrix');
       const savedFooter = sessionStorage.getItem('hmc_rawFooterRows');
       const savedWidths = sessionStorage.getItem('hmc_originalColWidths');
       const savedMerges = sessionStorage.getItem('hmc_originalMerges');
+      const savedSessionId = sessionStorage.getItem('hmc_sessionId');
 
       if (savedList) pickList = JSON.parse(savedList);
       if (savedPkg) packagingDb = JSON.parse(savedPkg);
       if (savedLoc) locationMap = JSON.parse(savedLoc);
+      if (savedLocationRows) locationMasterRows = JSON.parse(savedLocationRows);
+      if (savedLocationHeaders) locationMasterHeaders = JSON.parse(savedLocationHeaders);
+      if (savedLocationSheet) locationMasterSheetName = savedLocationSheet;
+      if (savedSessionId) sessionId = savedSessionId;
       if (savedMo) moveOrderNum = savedMo;
       if (savedCust) customerName = savedCust;
       if (savedHeader) rawHeaderMatrix = JSON.parse(savedHeader);
@@ -652,6 +870,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (savedMerges) originalMerges = JSON.parse(savedMerges);
       if (savedIdx !== null) currentIndex = parseInt(savedIdx);
 
+      if (!sessionId && rawHeaderMatrix[1] && rawHeaderMatrix[1][3] !== undefined) {
+        sessionId = String(rawHeaderMatrix[1][3] ?? '').trim();
+      }
+
       if (pickList && pickList.length > 0) {
         updateHeaderDisplay();
         document.getElementById('uploadCard').classList.add('hidden');
@@ -660,6 +882,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('navGroup').classList.remove('hidden');
         renderCurrentItem();
         renderSummaryTable();
+        if (sessionId) saveSessionState();
       }
     }
 
@@ -668,10 +891,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('headerSubtitle').innerText = `Customer: ${customerName}`;
     }
 
-    function clearSessionAndReset() {
-      if (confirm("Are you sure you want to clear current session data?")) {
-        sessionStorage.clear();
+    async function clearSessionAndReset() {
+      const prompt = sessionId
+        ? `Clear the saved picking progress for pick-slip identifier ${sessionId}? This removes that session from this device.`
+        : 'Are you sure you want to clear the current session data?';
+      if (!confirm(prompt)) return;
+      try {
+        if (sessionId) await deletePersistentSession(sessionId);
+        [
+          'hmc_app_version', 'hmc_pickList', 'hmc_packagingDb', 'hmc_currentIndex',
+          'hmc_locationMap', 'hmc_locationMasterRows', 'hmc_locationMasterHeaders',
+          'hmc_locationMasterSheetName', 'hmc_moveOrderNum', 'hmc_customerName', 'hmc_rawHeaderMatrix',
+          'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges', 'hmc_sessionId'
+        ].forEach(key => sessionStorage.removeItem(key));
         location.reload();
+      } catch (error) {
+        alert(`Could not clear the saved session: ${error.message || error}`);
       }
     }
 
@@ -1154,8 +1389,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       reader.onload = function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        locationMasterSheetName = workbook.SheetNames[0] || 'Store Locations';
+        const sheet = workbook.Sheets[locationMasterSheetName];
         const rows = XLSX.utils.sheet_to_json(sheet);
+        locationMasterRows = rows.map(row => ({ ...row }));
+        locationMasterHeaders = rows.length ? Object.keys(rows[0]) : [];
 
         locationMap = {};
         rows.forEach(r => {
@@ -1469,10 +1707,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellStyles: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+        const d2Cell = sheet['D2'];
+        const d2Display = d2Cell ? String(d2Cell.w ?? '').trim() : '';
+        const d2Identifier = String(d2Display || (d2Cell?.v ?? '')).trim();
+        sessionId = d2Identifier;
+        if (sessionId) {
+          try {
+            const savedSession = await loadPersistentSession(sessionId);
+            if (savedSession && Array.isArray(savedSession.pickList) && savedSession.pickList.length) {
+              await restorePersistentSession(savedSession);
+              return;
+            }
+          } catch (error) {
+            console.warn('Could not check for a saved D2 session:', error);
+          }
+        } else {
+          alert('Cell D2 is blank in this pick slip. Picking can continue, but this slip cannot be saved and resumed by D2.');
+          const status = document.getElementById('sessionPersistenceStatus');
+          if (status) {
+            status.textContent = 'Progress is not being saved: cell D2 is blank in this pick slip.';
+            status.style.color = '#b42318';
+          }
+        }
 
         originalColWidths = sheet['!cols'] || [];
         originalMerges = sheet['!merges'] || [];
@@ -1918,7 +2179,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           : `<span style="color:var(--warning); font-weight:bold;">PENDING</span>`;
 
         const isAdjusted = item.finalPickedQty !== item.requestedQty;
-        const revisedQtyDisplay = isAdjusted ? item.finalPickedQty : '';
+        const pickedTick = item.itemPicked ? ' ✓' : '';
+        const requestedQtyDisplay = !isAdjusted
+          ? `${item.finalPickedQty ?? item.requestedQty}${pickedTick}`
+          : item.requestedQty;
+        const revisedQtyDisplay = isAdjusted ? `${item.finalPickedQty}${pickedTick}` : '';
 
         tr.innerHTML = `
           <td>${item.line}</td>
@@ -1928,7 +2193,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <td><strong>${item.location}</strong></td>
           <td>${item.lot}</td>
           <td>${item.expiry}</td>
-          <td>${item.requestedQty}</td>
+          <td>${requestedQtyDisplay}</td>
           <td style="color:#15803d; font-weight:bold;">${revisedQtyDisplay}</td>
           <td>${statusLabel}</td>
         `;
@@ -2082,16 +2347,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const nearExp = isNearExpiry(item.expiry);
         const isGeneric = isGenericItem(item);
 
-        const statusText = isPending
-          ? "PENDING"
-          : (isAdjusted ? "ADJUSTED" : "✓");
+        const statusText = isPending ? "PENDING" : (isAdjusted ? "ADJUSTED" : "PICKED");
 
         let remarks = item.comment || "";
         if (nearExp) {
           remarks = remarks ? `Near Expiry | ${remarks}` : "Near Expiry";
         }
 
-        const qtyRevisedVal = isAdjusted ? item.finalPickedQty : "";
+        const pickedTick = item.itemPicked ? " ✓" : "";
+        const qtyRequestedVal = !isAdjusted
+          ? `${Number(item.finalPickedQty ?? item.requestedQty) || 0}${pickedTick}`
+          : (Number(item.requestedQty) || 0);
+        const qtyRevisedVal = isAdjusted ? `${Number(item.finalPickedQty) || 0}${pickedTick}` : "";
 
         const row = worksheet.addRow([
           item.code,
@@ -2100,8 +2367,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           item.location || '4.4.4.DEFBN',
           item.lot,
           item.expiry,
-          Number(item.requestedQty) || 0,
-          qtyRevisedVal !== "" ? Number(qtyRevisedVal) : "",
+          qtyRequestedVal,
+          qtyRevisedVal,
           statusText,
           remarks
         ]);
@@ -2465,6 +2732,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     // Export 2: Updated Location Master File
+    function buildUpdatedLocationExportRows() {
+      const codeAliases = ['itemcode', 'itemnumber', 'item', 'code'];
+      const locationAliases = ['location', 'storelocation', 'binlocation', 'bin', 'locator'];
+      const headerFor = aliases => locationMasterHeaders.find(h => aliases.includes(String(h).trim().toLowerCase().replace(/[^a-z0-9]/g, '')));
+      const codeHeader = headerFor(codeAliases) || 'Item Code';
+      const locationHeader = headerFor(locationAliases) || 'Location';
+
+      if (!locationMasterRows.length || !locationMasterHeaders.length) {
+        return Object.keys(locationMap).map(code => ({ 'Item Code': code, Location: locationMap[code] }));
+      }
+
+      const exportData = locationMasterRows.map(row => ({ ...row }));
+      const seen = new Set();
+      exportData.forEach(row => {
+        const rawCode = row[codeHeader];
+        if (rawCode === undefined || rawCode === null || String(rawCode).trim() === '') return;
+        const code = String(rawCode).trim();
+        seen.add(code);
+        if (Object.prototype.hasOwnProperty.call(locationMap, code)) row[locationHeader] = locationMap[code];
+      });
+
+      Object.entries(locationMap).forEach(([code, location]) => {
+        if (seen.has(String(code).trim())) return;
+        const row = Object.fromEntries(locationMasterHeaders.map(header => [header, '']));
+        row[codeHeader] = code;
+        row[locationHeader] = location;
+        exportData.push(row);
+      });
+      return exportData;
+    }
+
     function exportLocationDatabaseExcel() {
       const itemCodes = Object.keys(locationMap);
       if (itemCodes.length === 0) {
@@ -2472,14 +2770,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      const exportData = itemCodes.map(code => ({
-        "Item Code": code,
-        "Location": locationMap[code]
-      }));
+      const exportData = buildUpdatedLocationExportRows();
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Store Locations");
+      XLSX.utils.book_append_sheet(workbook, worksheet, locationMasterSheetName || "Store Locations");
 
       const timestamp = getFormattedTimestamp();
       XLSX.writeFile(workbook, `HMC_Store_Locations_${timestamp}.xlsx`);
