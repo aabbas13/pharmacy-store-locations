@@ -51,6 +51,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .header-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: none; }
     .header-btn.voice-active { background: #166534; border-color: #86efac; }
     .voice-status { display: block; margin: 4px 0 7px; padding: 5px 8px; border-radius: 7px; background: #f1f5f9; color: #475569; font-size: 0.72rem; }
+    .voice-commands-help { margin: 4px 0 8px; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 8px; background: #eff6ff; }
+    .voice-commands-help > summary { color: #1d4ed8; cursor: pointer; font-size: 0.76rem; font-weight: 700; }
+    .voice-commands-help ul { margin: 7px 0 5px 18px; padding: 0; color: #334155; font-size: 0.74rem; line-height: 1.4; }
+    .voice-commands-help p { color: #475569; font-size: 0.72rem; margin-top: 5px; }
     @media (max-width: 480px) {
       header { padding: 10px; align-items: flex-start; }
       .header-main { font-size: 0.88rem; }
@@ -314,6 +318,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <span id="statusBadge" class="status-badge badge-pending">PENDING</span>
     </div>
     <small id="voiceStatus" class="voice-status" role="status" aria-live="polite">Voice mode is off. Start Voice and allow microphone access. Recognition may use your browser’s speech service.</small>
+    <details class="voice-commands-help">
+      <summary>🎙 Voice Commands — tap to expand</summary>
+      <ul>
+        <li><strong>“Read lot”</strong> — reads the current lot once.</li>
+        <li><strong>“Read package”</strong> — reads pack, carton, catch, and strip sizes.</li>
+        <li><strong>“Pack size ten”</strong>, <strong>“carton size twelve”</strong>, <strong>“catch size four”</strong>, or <strong>“strip size six”</strong> — proposes a package value.</li>
+        <li><strong>“Save package”</strong> — saves the current package details.</li>
+        <li><strong>“Confirm lot and expiry”</strong> — confirms the displayed lot and expiry.</li>
+        <li><strong>“Confirm item picked”</strong> — confirms the current pick.</li>
+        <li><strong>“Next pending”</strong> — moves to the next unpicked item.</li>
+        <li><strong>“Read item”</strong> — reads item, location, lot, and expiry.</li>
+      </ul>
+      <p>For changes, saves, confirmations, and moving to another item, the helper asks first. Say <strong>“yes”</strong> to proceed or <strong>“no”</strong> to cancel.</p>
+    </details>
 
     <div class="item-code">
       <span id="itemCodeDisplay">ITEM: --</span>
