@@ -2504,7 +2504,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('finalReportSortModal').style.display = 'none';
     }
 
-    function generateFinalReport(sortMode) {
+    async function generateFinalReport(sortMode) {
+      const buttons = [...document.querySelectorAll('#finalReportSortModal button')];
+      const originalLabels = buttons.map(button => button.textContent);
+      buttons.forEach(button => { button.disabled = true; });
+      if (buttons[0]) buttons[0].textContent = 'Preparing report…';
+      if (buttons[1]) buttons[1].textContent = 'Preparing report…';
+      try {
       // Apply the requested final report order immediately before generating
       // the confirmation workbook. Location sorting uses the established
       // DR-before-SH pick-path rules; line sorting restores report line order.
@@ -2518,13 +2524,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
       renderCurrentItem();
       renderSummaryTable();
+      await exportUpdatedExcel();
       closeFinalReportSortModal();
-      exportUpdatedExcel();
+      } catch (error) {
+        console.error('Final confirmation report export failed:', error);
+        alert(`The final report could not be generated. ${error.message || error}`);
+      } finally {
+        buttons.forEach((button, index) => {
+          button.disabled = false;
+          button.textContent = originalLabels[index];
+        });
+      }
     }
 
     // Export 1: Final Confirmed Pick Slip Excel Export using ExcelJS with Precise Alignments and Uploaded File Widths
     async function exportUpdatedExcel() {
       if (pickList.length === 0) return;
+      if (typeof ExcelJS === 'undefined') {
+        throw new Error('The Excel report component did not load. Check the internet connection, refresh the picker, and try again.');
+      }
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Confirmed Pick Slip");
@@ -2915,13 +2933,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
       }
 
-      if (!irFooterRow || irFooterRow.length === 0) {
-        throw new Error(
-          'No IR footer row was detected in the source pick slip. ' +
-          'Please reload the original pick-slip file in Version 19 and export again.'
-        );
-      }
-
+      const reportHasFooter = Array.isArray(irFooterRow) && irFooterRow.length > 0;
       if (irFooterRow && irFooterRow.length > 0) {
         const footerParts = irFooterRow
           .map(c => String(c ?? '').replace(/\s+/g, ' ').trim())
@@ -2960,9 +2972,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       // Enforce the footer in xl/worksheets/sheet1.xml. Excel's Page Setup
       // dialog reads this XML, so this guarantees that Custom Footer is
       // populated even if the ExcelJS serializer omits headerFooter.
-      if (!irFooterRow || irFooterRow.length === 0) {
-        throw new Error('Footer data was unexpectedly lost before XLSX XML patching.');
-      }
       if (irFooterRow && irFooterRow.length > 0) {
         if (typeof JSZip === 'undefined') {
           throw new Error('Embedded JSZip failed to load; XLSX footer cannot be safely generated.');
@@ -3019,8 +3028,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
+      document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => {
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+      if (!reportHasFooter) {
+        alert('The report was downloaded, but no IR/signature footer row was found in the pick slip, so the repeated print footer was omitted.');
+      }
     }
 
     // Export 2: Updated Location Master File
