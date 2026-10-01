@@ -44,11 +44,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     body { background-color: var(--bg); color: var(--text); padding: 12px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100vh; }
 
     header { background: var(--primary); color: white; padding: 14px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-    .header-title-box { display: flex; flex-direction: column; text-align: left; }
+    .header-title-box { display: flex; flex: 1; min-width: 0; flex-direction: column; text-align: left; }
     .header-main { font-weight: bold; font-size: 1.05rem; }
     .header-sub { font-size: 0.8rem; opacity: 0.9; margin-top: 2px; }
-    .header-actions { display: flex; gap: 6px; }
+    .header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; max-width: 62%; }
     .header-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: none; }
+    .header-btn.voice-active { background: #166534; border-color: #86efac; }
+    .voice-status { display: block; margin: 4px 0 7px; padding: 5px 8px; border-radius: 7px; background: #f1f5f9; color: #475569; font-size: 0.72rem; }
+    @media (max-width: 480px) {
+      header { padding: 10px; align-items: flex-start; }
+      .header-main { font-size: 0.88rem; }
+      .header-sub { font-size: 0.65rem; }
+      .header-actions { max-width: 60%; }
+      .header-btn { padding: 5px 6px; font-size: 0.68rem; }
+    }
 
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
 
@@ -193,6 +202,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <span class="header-sub" id="headerSubtitle">Move Order & Customer Header Details</span>
     </div>
     <div class="header-actions">
+      <button class="header-btn" id="voiceModeBtn" type="button" onclick="toggleVoiceMode()">🎙 Start Voice</button>
       <button class="header-btn" onclick="openSortModal()">🔀 Sort</button>
       <button class="header-btn" onclick="openCalculator()">🧮 Calc</button>
     </div>
@@ -303,6 +313,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <span class="item-counter" id="itemCounter">Item 1 of --</span>
       <span id="statusBadge" class="status-badge badge-pending">PENDING</span>
     </div>
+    <small id="voiceStatus" class="voice-status" role="status" aria-live="polite">Voice mode is off. Start Voice and allow microphone access. Recognition may use your browser’s speech service.</small>
 
     <div class="item-code">
       <span id="itemCodeDisplay">ITEM: --</span>
@@ -323,7 +334,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div><b>EXP</b><br><span id="expDisplay"></span></div>
     </div>
 
-    <details class="picker-secondary-details">
+    <details id="packageDetails" class="picker-secondary-details">
       <summary>📦 Packaging details and quantity breakdown</summary>
       <label>Packaging Configuration (Pack × Carton × Catch)</label>
       <div class="inline-config">
@@ -581,6 +592,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let currentIndex = 0;
     let sessionId = '';
     let sessionSaveTimer = null;
+    let voiceRecognition = null;
+    let voiceModeActive = false;
+    let voiceListening = false;
+    let voiceSpeaking = false;
+    let voiceRestartTimer = null;
+    let pendingVoiceAction = null;
     const HMC_SESSION_DB = 'hmc-picking-sessions-v1';
     const HMC_SESSION_STORE = 'sessions';
 
@@ -2219,8 +2236,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let lotSpeechActive = false;
     let lotSpeechRunId = 0;
 
-    function stopLotSpeech() {
+    function stopLotSpeech(resumeVoice = true) {
+      const wasLotSpeaking = lotSpeechActive;
       lotSpeechActive = false;
+      if (wasLotSpeaking) voiceSpeaking = false;
       lotSpeechRunId += 1;
       if (lotSpeechTimer !== null) {
         clearTimeout(lotSpeechTimer);
@@ -2229,14 +2248,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       const button = document.getElementById('speakLotBtn');
       if (button) button.textContent = '🔊 Read lot';
+      if (resumeVoice && voiceModeActive && !voiceSpeaking) scheduleVoiceRestart();
     }
 
     function speakLotSerial(value) {
-      stopLotSpeech();
+      stopLotSpeech(false);
       if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
       const lot = String(value ?? '').trim();
       if (!lot || lot === 'N/A' || lot === '--') return;
       const spelledLot = [...lot].map(char => char === '-' ? 'dash' : char === '/' ? 'slash' : char).join(' ');
+      voiceSpeaking = true;
+      if (voiceRecognition && voiceListening) {
+        try { voiceRecognition.stop(); } catch (_) {}
+      }
       lotSpeechActive = true;
       const runId = lotSpeechRunId;
       const button = document.getElementById('speakLotBtn');
@@ -2246,7 +2270,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const finishReading = () => {
         if (runId !== lotSpeechRunId) return;
         lotSpeechActive = false;
+        voiceSpeaking = false;
         if (button) button.textContent = '🔊 Read lot';
+        if (voiceModeActive) scheduleVoiceRestart();
       };
       utterance.onend = finishReading;
       utterance.onerror = finishReading;
@@ -2256,6 +2282,256 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function toggleLotSpeech() {
       if (lotSpeechActive) stopLotSpeech();
       else speakLotSerial(pickList[currentIndex]?.lot);
+    }
+
+    function setVoiceStatus(message, listening = false) {
+      const status = document.getElementById('voiceStatus');
+      const button = document.getElementById('voiceModeBtn');
+      if (status) status.textContent = message;
+      if (button) {
+        button.textContent = voiceModeActive ? '⏹ Stop Voice' : '🎙 Start Voice';
+        button.classList.toggle('voice-active', voiceModeActive && listening);
+      }
+    }
+
+    function scheduleVoiceRestart(delay = 350) {
+      if (voiceRestartTimer) clearTimeout(voiceRestartTimer);
+      if (!voiceModeActive || voiceSpeaking) return;
+      voiceRestartTimer = setTimeout(startVoiceRecognition, delay);
+    }
+
+    function startVoiceRecognition() {
+      if (!voiceModeActive || !voiceRecognition || voiceSpeaking || voiceListening) return;
+      try {
+        voiceRecognition.start();
+      } catch (error) {
+        if (error.name !== 'InvalidStateError') {
+          setVoiceStatus(`Voice listening could not start: ${error.message || error}`);
+        }
+      }
+    }
+
+    function toggleVoiceMode() {
+      if (voiceModeActive) {
+        voiceModeActive = false;
+        pendingVoiceAction = null;
+        voiceSpeaking = false;
+        if (voiceRestartTimer) clearTimeout(voiceRestartTimer);
+        if (voiceRecognition) {
+          try { voiceRecognition.abort(); } catch (_) {}
+        }
+        stopLotSpeech(false);
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        setVoiceStatus('Voice mode is off.');
+        return;
+      }
+
+      if (!pickList.length) {
+        alert('Load a pick slip and start picking before enabling voice commands.');
+        return;
+      }
+
+      const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!Recognition) {
+        setVoiceStatus('Voice commands are not available in this browser. Try a supported mobile browser.');
+        return;
+      }
+
+      voiceRecognition = new Recognition();
+      voiceRecognition.lang = 'en-US';
+      voiceRecognition.continuous = true;
+      voiceRecognition.interimResults = false;
+      voiceRecognition.maxAlternatives = 1;
+      voiceRecognition.onstart = () => {
+        voiceListening = true;
+        setVoiceStatus(pendingVoiceAction ? 'Listening for “yes” or “no”…' : 'Listening for picker commands…', true);
+      };
+      voiceRecognition.onresult = event => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (event.results[i].isFinal) handleVoiceCommand(event.results[i][0].transcript);
+        }
+      };
+      voiceRecognition.onerror = event => {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          voiceModeActive = false;
+          setVoiceStatus('Microphone access was denied. Allow microphone access in the browser and try again.');
+        }
+      };
+      voiceRecognition.onend = () => {
+        voiceListening = false;
+        if (voiceModeActive && !voiceSpeaking) {
+          setVoiceStatus(pendingVoiceAction ? 'Waiting for your confirmation…' : 'Reconnecting to voice commands…');
+          scheduleVoiceRestart(500);
+        }
+      };
+      voiceModeActive = true;
+      setVoiceStatus('Starting voice mode… approve microphone access if prompted.');
+      startVoiceRecognition();
+    }
+
+    function speakVoiceResponse(message, afterSpeaking) {
+      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+        if (afterSpeaking) afterSpeaking();
+        if (voiceModeActive) scheduleVoiceRestart();
+        return;
+      }
+      stopLotSpeech(false);
+      voiceSpeaking = true;
+      if (voiceRecognition && voiceListening) {
+        try { voiceRecognition.stop(); } catch (_) {}
+      }
+      if (voiceRestartTimer) clearTimeout(voiceRestartTimer);
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.rate = 0.95;
+      const finish = () => {
+        voiceSpeaking = false;
+        if (afterSpeaking) afterSpeaking();
+        if (voiceModeActive) scheduleVoiceRestart();
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function askVoiceConfirmation(prompt, action) {
+      pendingVoiceAction = action;
+      setVoiceStatus('Please confirm the requested action.');
+      speakVoiceResponse(`${prompt} Say yes to confirm or no to cancel.`);
+    }
+
+    function parseSpokenNumber(value) {
+      const text = String(value || '').toLowerCase().replace(/[^a-z0-9 -]/g, ' ').trim();
+      const digitMatch = text.match(/\d+/);
+      if (digitMatch) return Number(digitMatch[0]);
+      const words = text.split(/\s+/).filter(word => word && !['to', 'is', 'at', 'of', 'please'].includes(word));
+      const ones = { zero:0, oh:0, one:1, two:2, to:2, too:2, three:3, four:4, for:4, five:5, six:6, seven:7, eight:8, ate:8, nine:9, ten:10, eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19 };
+      const tens = { twenty:20, thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90 };
+      let total = 0, current = 0, found = false;
+      for (const word of words) {
+        if (Object.prototype.hasOwnProperty.call(ones, word)) { current += ones[word]; found = true; }
+        else if (Object.prototype.hasOwnProperty.call(tens, word)) { current += tens[word]; found = true; }
+        else if (word === 'hundred' && found) current *= 100;
+        else if ((word === 'thousand' || word === 'k') && found) { total += current * 1000; current = 0; }
+      }
+      return found ? total + current : null;
+    }
+
+    function describeCurrentPackaging() {
+      const values = [
+        ['pack size', document.getElementById('packSize').value],
+        ['carton size', document.getElementById('cartonSizeInPacks').value],
+        ['catch size', document.getElementById('catchSizeInPacks').value],
+        ['strip size', document.getElementById('stripSize').value]
+      ];
+      return values.map(([name, value]) => `${name}: ${value || 'not set'}`).join('. ');
+    }
+
+    function handleVoiceCommand(rawTranscript) {
+      const phrase = String(rawTranscript || '').toLowerCase().replace(/[.,!?]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (!phrase) return;
+
+      if (pendingVoiceAction) {
+        if (/^(yes|yeah|yep|confirm|correct|do it)$/.test(phrase)) {
+          const action = pendingVoiceAction;
+          pendingVoiceAction = null;
+          setVoiceStatus('Confirmed.');
+          speakVoiceResponse('Confirmed.', action);
+        } else if (/^(no|nope|cancel|stop)$/.test(phrase)) {
+          pendingVoiceAction = null;
+          speakVoiceResponse('Cancelled.');
+          setVoiceStatus('Cancelled. Listening for picker commands…');
+        } else {
+          speakVoiceResponse('Please say yes to confirm or no to cancel.');
+        }
+        return;
+      }
+
+      if (/^(read|repeat|say) (the )?lot( number)?$/.test(phrase) || phrase === 'lot number') {
+        speakLotSerial(pickList[currentIndex]?.lot);
+        return;
+      }
+      if (/^(read|repeat) (the )?(package|packaging|package details)$/.test(phrase)) {
+        speakVoiceResponse(describeCurrentPackaging());
+        return;
+      }
+      if (/^(read|repeat) (the )?(item|item details)$/.test(phrase)) {
+        const item = pickList[currentIndex];
+        speakVoiceResponse(`Item ${item.code}. ${item.name}. Location ${item.location || 'not set'}. Lot number ${item.lot}. Expiry ${item.expiry}.`);
+        return;
+      }
+
+      const packageFields = [
+        { aliases: ['pack size', 'units per pack'], id: 'packSize', label: 'pack size' },
+        { aliases: ['carton size', 'packs per carton'], id: 'cartonSizeInPacks', label: 'carton size' },
+        { aliases: ['catch size', 'packs per catch'], id: 'catchSizeInPacks', label: 'catch size' },
+        { aliases: ['strip size', 'units per strip'], id: 'stripSize', label: 'strip size' }
+      ];
+      for (const field of packageFields) {
+        const alias = field.aliases.find(value => phrase.includes(value));
+        if (!alias) continue;
+        const number = parseSpokenNumber(phrase.slice(phrase.indexOf(alias) + alias.length));
+        if (number === null || number < 0) {
+          speakVoiceResponse(`I did not catch a valid number for ${field.label}. Say ${field.label} followed by the number.`);
+          return;
+        }
+        const item = pickList[currentIndex];
+        if (!item.lotConfirmed) {
+          speakVoiceResponse('Confirm the lot and expiry first. Then I can change the package information.');
+          return;
+        }
+        askVoiceConfirmation(`Set ${field.label} to ${number} for item ${item.code}`, () => {
+          document.getElementById('packageDetails').open = true;
+          const input = document.getElementById(field.id);
+          input.value = number;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          setVoiceStatus(`${field.label} set to ${number}. Say “save package” when all package values are ready.`);
+        });
+        return;
+      }
+
+      if (/^(save|confirm|save the|confirm the)? ?(package|packaging)( details| data)?$/.test(phrase)) {
+        if (!pickList[currentIndex]?.lotConfirmed) {
+          speakVoiceResponse('Confirm the lot and expiry first. Then I can save the package information.');
+          return;
+        }
+        if (!document.getElementById('packSize').value) {
+          speakVoiceResponse('Pack size is required before saving the package.');
+          return;
+        }
+        const item = pickList[currentIndex];
+        askVoiceConfirmation(`Save the packaging details for item ${item.code}: ${describeCurrentPackaging()}`, () => {
+          saveCurrentItemPackaging();
+          setVoiceStatus('Packaging saved for this item.');
+        });
+        return;
+      }
+
+      if (/^(confirm )?(lot|lot and expiry|lot and expiration|lot expiry)$/.test(phrase) || phrase === 'confirm lot and exp') {
+        const item = pickList[currentIndex];
+        if (item.lotConfirmed) {
+          speakVoiceResponse('The lot and expiry are already confirmed.');
+          return;
+        }
+        askVoiceConfirmation(`Confirm lot number ${item.lot} and expiry ${item.expiry} for item ${item.code}`, () => toggleLotCheck());
+        return;
+      }
+
+      if (/^(confirm )?(item )?picked$/.test(phrase) || /^(confirm|finish) picking$/.test(phrase)) {
+        const item = pickList[currentIndex];
+        if (!item.lotConfirmed) {
+          speakVoiceResponse('Confirm the lot and expiry first.');
+          return;
+        }
+        askVoiceConfirmation(`Confirm item ${item.code} as picked with quantity ${document.getElementById('pickedQtyInput').value}`, () => confirmFullPicked());
+        return;
+      }
+
+      if (/^next pending$/.test(phrase)) {
+        askVoiceConfirmation('Move to the next pending item', () => navigateNextPending());
+        return;
+      }
+      speakVoiceResponse(`I did not recognize “${phrase}”. Try read package, pack size followed by a number, confirm lot and expiry, or next pending.`);
     }
 
     function confirmFullPicked() {
@@ -2405,7 +2681,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         : '';
       document.getElementById('lotDisplay').innerText = item.lot;
       const lotLength = String(item.lot ?? '').replace(/\s/g, '').length;
-      const baseLotSize = Math.max(0.9, Math.min(1.4, window.innerWidth * 0.04 / 16));
+      const baseLotSize = Math.max(1.35, Math.min(2.1, window.innerWidth * 0.06 / 16));
       const lotFontSize = Math.max(0.65, baseLotSize * (18 / Math.max(lotLength, 18)));
       document.getElementById('lotDisplay').style.fontSize = `${lotFontSize}rem`;
       document.getElementById('expDisplay').innerText = item.expiry;
