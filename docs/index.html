@@ -612,8 +612,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         schemaVersion: 1,
         sessionId: String(sessionId).trim(),
         savedAt: new Date().toISOString(),
-        pickList, packagingDb, currentIndex, locationMap, locationMasterRows,
-        locationMasterHeaders, locationMasterSheetName, moveOrderNum, customerName,
+        pickList, packagingDb, currentIndex, locationMap, moveOrderNum, customerName,
         pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
         rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges
       };
@@ -706,9 +705,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       pickList = saved.pickList || [];
       packagingDb = saved.packagingDb || {};
       locationMap = saved.locationMap || {};
-      locationMasterRows = saved.locationMasterRows || [];
-      locationMasterHeaders = saved.locationMasterHeaders || [];
-      locationMasterSheetName = saved.locationMasterSheetName || 'Store Locations';
+      locationMasterRows = saved.locationMasterRows || locationMasterRows;
+      locationMasterHeaders = saved.locationMasterHeaders || locationMasterHeaders;
+      locationMasterSheetName = saved.locationMasterSheetName || locationMasterSheetName || 'Store Locations';
       pickedPlacementLocation = cleanPlacementValue(saved.pickedPlacementLocation || '');
       pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
       confirmedPickCount = Number(saved.confirmedPickCount ?? pickList.filter(item => item.itemPicked).length) || 0;
@@ -849,9 +848,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_packagingDb', JSON.stringify(packagingDb));
       sessionStorage.setItem('hmc_currentIndex', currentIndex);
       sessionStorage.setItem('hmc_locationMap', JSON.stringify(locationMap));
-      sessionStorage.setItem('hmc_locationMasterRows', JSON.stringify(locationMasterRows));
-      sessionStorage.setItem('hmc_locationMasterHeaders', JSON.stringify(locationMasterHeaders));
-      sessionStorage.setItem('hmc_locationMasterSheetName', locationMasterSheetName);
       sessionStorage.setItem('hmc_pickedPlacementLocation', pickedPlacementLocation);
       sessionStorage.setItem('hmc_confirmedPickCount', String(confirmedPickCount));
       sessionStorage.setItem('hmc_placementUpdateRequired', String(placementUpdateRequired));
@@ -870,9 +866,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedPkg = sessionStorage.getItem('hmc_packagingDb');
       const savedIdx = sessionStorage.getItem('hmc_currentIndex');
       const savedLoc = sessionStorage.getItem('hmc_locationMap');
-      const savedLocationRows = sessionStorage.getItem('hmc_locationMasterRows');
-      const savedLocationHeaders = sessionStorage.getItem('hmc_locationMasterHeaders');
-      const savedLocationSheet = sessionStorage.getItem('hmc_locationMasterSheetName');
       const savedPlacementLocation = sessionStorage.getItem('hmc_pickedPlacementLocation');
       const savedConfirmedPickCount = sessionStorage.getItem('hmc_confirmedPickCount');
       const savedPlacementUpdateRequired = sessionStorage.getItem('hmc_placementUpdateRequired');
@@ -887,9 +880,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (savedList) pickList = JSON.parse(savedList);
       if (savedPkg) packagingDb = JSON.parse(savedPkg);
       if (savedLoc) locationMap = JSON.parse(savedLoc);
-      if (savedLocationRows) locationMasterRows = JSON.parse(savedLocationRows);
-      if (savedLocationHeaders) locationMasterHeaders = JSON.parse(savedLocationHeaders);
-      if (savedLocationSheet) locationMasterSheetName = savedLocationSheet;
       if (savedPlacementLocation !== null) pickedPlacementLocation = cleanPlacementValue(savedPlacementLocation);
       pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
       if (savedConfirmedPickCount !== null) confirmedPickCount = Number(savedConfirmedPickCount) || 0;
@@ -1246,11 +1236,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return selected.length ? selected.join('\n') : text;
     }
 
+    // Apply an asynchronously loaded or newly imported Location Master to
+    // rows that are already on screen. Keep each slip's own locator as a
+    // fallback instead of inserting fallback values into the master map.
+    function applyLocationMapToPickList() {
+      if (!Array.isArray(pickList) || !pickList.length) return;
+      pickList.forEach(item => {
+        const code = String(item.code ?? '').trim();
+        if (Object.prototype.hasOwnProperty.call(locationMap, code) && String(locationMap[code] ?? '').trim()) {
+          item.location = filterPreferredLocations(locationMap[code]);
+          item.locationMatched = true;
+        } else {
+          const fallback = item.sourceLocation !== undefined ? item.sourceLocation : item.location;
+          item.location = filterPreferredLocations(fallback || '4.4.4.DEFBN');
+          item.locationMatched = false;
+        }
+      });
+    }
+
     // Google Sheets Location Master with a durable, device-local offline copy.
     const HMC_LOCATION_SHEET_ID = '1Zxlt-mEVGEnufk6rb_tI3BUxg2ZLGcmE4I63wUYItnE';
     const HMC_LOCATION_DB = 'hmc-location-master-cache-v1';
     const HMC_LOCATION_STORE = 'masters';
     const HMC_LOCATION_CACHE_KEY = 'latest';
+    const HMC_LOCATION_SOURCE_KEY = 'original-source-workbook';
 
     function openLocationCacheDb() {
       return new Promise((resolve, reject) => {
@@ -1278,6 +1287,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         tx.objectStore(HMC_LOCATION_STORE).put(value, HMC_LOCATION_CACHE_KEY);
         tx.oncomplete = () => { db.close(); resolve(); };
         tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save the offline location cache.')); };
+      });
+    }
+
+    async function readLocationSourceData() {
+      const db = await openLocationCacheDb();
+      return new Promise((resolve, reject) => {
+        const request = db.transaction(HMC_LOCATION_STORE).objectStore(HMC_LOCATION_STORE).get(HMC_LOCATION_SOURCE_KEY);
+        request.onsuccess = () => { db.close(); resolve(request.result || null); };
+        request.onerror = () => { db.close(); reject(request.error || new Error('Could not restore the original location workbook data.')); };
+      });
+    }
+
+    async function writeLocationSourceData(value) {
+      const db = await openLocationCacheDb();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(HMC_LOCATION_STORE, 'readwrite');
+        tx.objectStore(HMC_LOCATION_STORE).put(value, HMC_LOCATION_SOURCE_KEY);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save the original location workbook data.')); };
       });
     }
 
@@ -1378,15 +1406,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     async function restoreGoogleLocationCache() {
       try {
-        const cached = await readLocationCache();
+        const [cached, sourceData] = await Promise.all([readLocationCache(), readLocationSourceData()]);
+        if (sourceData) {
+          locationMasterRows = sourceData.rows || [];
+          locationMasterHeaders = sourceData.headers || [];
+          locationMasterSheetName = sourceData.sheetName || 'Store Locations';
+        }
         if (cached && cached.locationMap && Object.keys(cached.locationMap).length) {
           if (!Object.keys(locationMap).length) {
             locationMap = cached.locationMap;
+            applyLocationMapToPickList();
             saveSessionState();
           }
           const cachedTime = cached.refreshedAt ? new Date(cached.refreshedAt).toLocaleString() : 'time unknown';
           const active = Object.keys(locationMap).length;
           updateGoogleLocationStatus(`${active.toLocaleString()} locations ready · last sheet refresh ${cachedTime} · fingerprint ${cached.fingerprint}`, 'ok');
+          if (pickList.length) {
+            renderCurrentItem();
+            renderSummaryTable();
+          }
         } else if (Object.keys(locationMap).length) {
           updateGoogleLocationStatus(`${Object.keys(locationMap).length.toLocaleString()} locations restored from this session · refresh for the latest Google Sheet`, 'info');
         } else {
@@ -1416,6 +1454,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         };
         await writeLocationCache(saved);
         locationMap = nextMap;
+        applyLocationMapToPickList();
         saveSessionState();
         document.getElementById('locStatus').innerText = `✓ Loaded ${Object.keys(locationMap).length} locations from Google Sheets`;
         updateGoogleLocationStatus(`Connected · ${Object.keys(locationMap).length.toLocaleString()} locations · ${new Date(saved.refreshedAt).toLocaleString()} · fingerprint ${saved.fingerprint}`, 'ok');
@@ -1444,7 +1483,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = async function(e) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         locationMasterSheetName = workbook.SheetNames[0] || 'Store Locations';
@@ -1455,15 +1494,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         locationMap = {};
         rows.forEach(r => {
-          const code = r['Item Code'] || r['Item'] || r['Code'];
-          const loc = r['Location'] || r['Bin'] || r['Locator'];
+          const getValue = aliases => {
+            const key = Object.keys(r).find(header => aliases.includes(String(header).trim().toLowerCase().replace(/[^a-z0-9]/g, '')));
+            return key ? r[key] : '';
+          };
+          const code = getValue(['itemcode', 'itemnumber', 'item', 'code']);
+          const loc = getValue(['location', 'storelocation', 'binlocation', 'bin', 'locator']);
           if (code && loc) {
             locationMap[String(code).trim()] = filterPreferredLocations(String(loc).trim());
           }
         });
 
+        try {
+          await writeLocationSourceData({ rows: locationMasterRows, headers: locationMasterHeaders, sheetName: locationMasterSheetName });
+        } catch (error) {
+          console.warn('Original location workbook columns will be available only until this page is closed:', error);
+        }
+        applyLocationMapToPickList();
         document.getElementById('locStatus').innerText = `✓ Loaded ${Object.keys(locationMap).length} locations`;
         saveSessionState();
+        if (pickList.length) {
+          renderCurrentItem();
+          renderSummaryTable();
+        }
       };
       reader.readAsArrayBuffer(file);
     });
@@ -1913,10 +1966,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const locationMatched = Object.prototype.hasOwnProperty.call(locationMap, itemCode);
           const shelfLocation = filterPreferredLocations(locationMatched ? locationMap[itemCode] : fallbackLoc);
 
-          if (!locationMatched) {
-            locationMap[itemCode] = shelfLocation;
-          }
-
           const parsedExp = formatExpiryDate(expIdx !== -1 ? row[expIdx] : 'N/A');
 
           // Lot/Serial must stay text and preserve leading zeroes.
@@ -1962,6 +2011,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             code: itemCode,
             name: descIdx !== -1 ? (row[descIdx] || 'N/A') : 'N/A',
             location: shelfLocation,
+            sourceLocation: fallbackLoc,
             locationMatched,
             lot: lotValue || 'N/A',
             expiry: parsedExp,
@@ -2927,7 +2977,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return exportData;
     }
 
-    function exportLocationDatabaseExcel() {
+    async function exportLocationDatabaseExcel() {
+      if (!locationMasterRows.length || !locationMasterHeaders.length) {
+        try {
+          const sourceData = await readLocationSourceData();
+          if (sourceData) {
+            locationMasterRows = sourceData.rows || [];
+            locationMasterHeaders = sourceData.headers || [];
+            locationMasterSheetName = sourceData.sheetName || 'Store Locations';
+          }
+        } catch (error) {
+          console.warn('Could not load the original location workbook columns before export:', error);
+        }
+      }
       const itemCodes = Object.keys(locationMap);
       if (itemCodes.length === 0) {
         alert("No locations available to export.");
