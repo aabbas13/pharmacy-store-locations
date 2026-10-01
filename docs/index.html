@@ -98,6 +98,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     .item-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #475569; margin-bottom: 12px; background: #f1f5f9; padding: 8px 12px; border-radius: 6px; }
+    .lot-value { display: block; color: #172554; font-size: clamp(1.8rem, 8vw, 2.8rem); line-height: 1.12; font-weight: 850; letter-spacing: 0.12em; overflow-wrap: anywhere; margin-top: 3px; }
+    .speak-lot-btn { padding: 5px 9px; margin-top: 5px; font-size: 0.8rem; border-radius: 7px; }
+    .placement-box { margin: 10px 0 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: #f8fafc; }
+    .placement-box input { max-width: 180px; font-size: 1.2rem; font-weight: 750; letter-spacing: 0.2em; text-align: center; }
+    .placement-hint { font-size: 0.8rem; color: var(--muted); margin: 5px 0 0; }
+    .placement-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(15,23,42,.62); }
+    .placement-modal-card { width: min(100%, 420px); padding: 20px; border-radius: 14px; background: #fff; box-shadow: 0 20px 60px #0004; }
+    .placement-modal-card h2 { margin: 0 0 8px; color: var(--primary); }
+    .placement-modal-card p { color: var(--muted); margin: 0 0 12px; }
 
     .btn-lot { background: var(--warning); color: white; width: 100%; font-size: 0.9rem; padding: 10px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; }
     .btn-lot.confirmed { background: var(--success); }
@@ -292,8 +301,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div class="item-name" id="itemNameDisplay">--</div>
 
     <div class="item-meta">
-      <div><b>Lot:</b> <span id="lotDisplay">--</span></div>
-      <div><b>Exp:</b> <span id="expDisplay">--</span></div>
+      <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Speak lot</button></div>
+      <div><b>EXP</b><br><span id="expDisplay"></span></div>
+    </div>
+
+    <div class="placement-box">
+      <label for="pickedPlacementInput">Picked item placement (up to 4 characters)</label>
+      <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Blank allowed">
+      <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
     </div>
 
     <div style="margin-bottom: 12px;">
@@ -372,6 +387,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <!-- Confirm Item Picked -->
     <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Item Picked</button>
+  </div>
+
+  <div id="placementUpdateModal" class="placement-modal" role="dialog" aria-modal="true" aria-labelledby="placementModalTitle">
+    <div class="placement-modal-card">
+      <h2 id="placementModalTitle">Placement update required</h2>
+      <p>Confirm or update the placement for the next items. Enter up to 4 characters; you may leave it blank.</p>
+      <label for="placementUpdateInput">Next placement</label>
+      <input type="text" id="placementUpdateInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Blank allowed">
+      <button type="button" style="width:100%;margin-top:12px;" onclick="confirmPlacementUpdate()">Save and continue</button>
+    </div>
   </div>
 
   <div id="tableSummaryCard" class="card hidden">
@@ -533,6 +558,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let locationMasterRows = [];
     let locationMasterHeaders = [];
     let locationMasterSheetName = 'Store Locations';
+    let pickedPlacementLocation = '';
+    let confirmedPickCount = 0;
+    let placementUpdateRequired = false;
     let pickList = [];
     let packagingDb = {};
     let currentIndex = 0;
@@ -586,6 +614,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         savedAt: new Date().toISOString(),
         pickList, packagingDb, currentIndex, locationMap, locationMasterRows,
         locationMasterHeaders, locationMasterSheetName, moveOrderNum, customerName,
+        pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
         rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges
       };
     }
@@ -666,6 +695,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateHeaderDisplay();
       renderCurrentItem();
       renderSummaryTable();
+      if (placementUpdateRequired) {
+        document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
+        document.getElementById('placementUpdateModal').style.display = 'flex';
+      }
     }
 
     async function restorePersistentSession(saved) {
@@ -676,6 +709,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       locationMasterRows = saved.locationMasterRows || [];
       locationMasterHeaders = saved.locationMasterHeaders || [];
       locationMasterSheetName = saved.locationMasterSheetName || 'Store Locations';
+      pickedPlacementLocation = cleanPlacementValue(saved.pickedPlacementLocation || '');
+      pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
+      confirmedPickCount = Number(saved.confirmedPickCount ?? pickList.filter(item => item.itemPicked).length) || 0;
+      placementUpdateRequired = Boolean(saved.placementUpdateRequired);
       currentIndex = Math.max(0, Math.min(Number(saved.currentIndex) || 0, pickList.length - 1));
       moveOrderNum = saved.moveOrderNum || 'UNKNOWN_MO';
       customerName = saved.customerName || 'UNKNOWN_CUSTOMER';
@@ -787,6 +824,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           'hmc_locationMasterRows',
           'hmc_locationMasterHeaders',
           'hmc_locationMasterSheetName',
+          'hmc_pickedPlacementLocation',
+          'hmc_confirmedPickCount',
+          'hmc_placementUpdateRequired',
           'hmc_moveOrderNum',
           'hmc_customerName',
           'hmc_rawHeaderMatrix',
@@ -812,6 +852,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_locationMasterRows', JSON.stringify(locationMasterRows));
       sessionStorage.setItem('hmc_locationMasterHeaders', JSON.stringify(locationMasterHeaders));
       sessionStorage.setItem('hmc_locationMasterSheetName', locationMasterSheetName);
+      sessionStorage.setItem('hmc_pickedPlacementLocation', pickedPlacementLocation);
+      sessionStorage.setItem('hmc_confirmedPickCount', String(confirmedPickCount));
+      sessionStorage.setItem('hmc_placementUpdateRequired', String(placementUpdateRequired));
       sessionStorage.setItem('hmc_moveOrderNum', moveOrderNum);
       sessionStorage.setItem('hmc_customerName', customerName);
       sessionStorage.setItem('hmc_rawHeaderMatrix', JSON.stringify(rawHeaderMatrix));
@@ -830,6 +873,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedLocationRows = sessionStorage.getItem('hmc_locationMasterRows');
       const savedLocationHeaders = sessionStorage.getItem('hmc_locationMasterHeaders');
       const savedLocationSheet = sessionStorage.getItem('hmc_locationMasterSheetName');
+      const savedPlacementLocation = sessionStorage.getItem('hmc_pickedPlacementLocation');
+      const savedConfirmedPickCount = sessionStorage.getItem('hmc_confirmedPickCount');
+      const savedPlacementUpdateRequired = sessionStorage.getItem('hmc_placementUpdateRequired');
       const savedMo = sessionStorage.getItem('hmc_moveOrderNum');
       const savedCust = sessionStorage.getItem('hmc_customerName');
       const savedHeader = sessionStorage.getItem('hmc_rawHeaderMatrix');
@@ -844,6 +890,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (savedLocationRows) locationMasterRows = JSON.parse(savedLocationRows);
       if (savedLocationHeaders) locationMasterHeaders = JSON.parse(savedLocationHeaders);
       if (savedLocationSheet) locationMasterSheetName = savedLocationSheet;
+      if (savedPlacementLocation !== null) pickedPlacementLocation = cleanPlacementValue(savedPlacementLocation);
+      pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
+      if (savedConfirmedPickCount !== null) confirmedPickCount = Number(savedConfirmedPickCount) || 0;
+      else confirmedPickCount = pickList.filter(item => item.itemPicked).length;
+      if (savedPlacementUpdateRequired !== null) placementUpdateRequired = savedPlacementUpdateRequired === 'true';
       if (savedSessionId) sessionId = savedSessionId;
       if (savedMo) moveOrderNum = savedMo;
       if (savedCust) customerName = savedCust;
@@ -882,6 +933,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('navGroup').classList.remove('hidden');
         renderCurrentItem();
         renderSummaryTable();
+        if (placementUpdateRequired) {
+          document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
+          document.getElementById('placementUpdateModal').style.display = 'flex';
+        }
         if (sessionId) saveSessionState();
       }
     }
@@ -901,7 +956,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         [
           'hmc_app_version', 'hmc_pickList', 'hmc_packagingDb', 'hmc_currentIndex',
           'hmc_locationMap', 'hmc_locationMasterRows', 'hmc_locationMasterHeaders',
-          'hmc_locationMasterSheetName', 'hmc_moveOrderNum', 'hmc_customerName', 'hmc_rawHeaderMatrix',
+          'hmc_locationMasterSheetName', 'hmc_pickedPlacementLocation', 'hmc_confirmedPickCount', 'hmc_placementUpdateRequired',
+          'hmc_moveOrderNum', 'hmc_customerName', 'hmc_rawHeaderMatrix',
           'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges', 'hmc_sessionId'
         ].forEach(key => sessionStorage.removeItem(key));
         location.reload();
@@ -922,11 +978,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         tableCard.classList.add('hidden');
         btnSingle.classList.add('active');
         btnTable.classList.remove('active');
+        renderCurrentItem();
       } else {
         singleCard.classList.add('hidden');
         tableCard.classList.remove('hidden');
         btnSingle.classList.remove('active');
         btnTable.classList.add('active');
+        stopLotSpeech();
         renderSummaryTable();
       }
     }
@@ -1787,6 +1845,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const qtyIdx = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
 
         pickList = [];
+        confirmedPickCount = 0;
+        pickedPlacementLocation = '';
+        placementUpdateRequired = false;
         rawFooterRows = [];
         irFooterRow = [];
 
@@ -2011,10 +2072,96 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
     });
 
+    function cleanPlacementValue(value) {
+      return String(value ?? '').toUpperCase().slice(0, 4);
+    }
+
+    function updatePlacementHint() {
+      const remaining = confirmedPickCount % 10 === 0 ? 10 : 10 - (confirmedPickCount % 10);
+      const countLabel = document.getElementById('placementHint');
+      if (countLabel) countLabel.textContent = `${confirmedPickCount} confirmed picks · placement can be changed anytime · update prompt after ${remaining} more pick${remaining === 1 ? '' : 's'} (blank is allowed).`;
+    }
+
+    document.getElementById('pickedPlacementInput').addEventListener('input', function() {
+      const value = cleanPlacementValue(this.value);
+      if (this.value !== value) this.value = value;
+      pickedPlacementLocation = value;
+      const item = pickList[currentIndex];
+      if (item && item.itemPicked) item.pickedPlacement = value;
+      saveSessionState();
+      renderSummaryTable();
+    });
+
+    document.getElementById('placementUpdateInput').addEventListener('input', function() {
+      const value = cleanPlacementValue(this.value);
+      if (this.value !== value) this.value = value;
+    });
+
+    function confirmPlacementUpdate() {
+      pickedPlacementLocation = cleanPlacementValue(document.getElementById('placementUpdateInput').value);
+      placementUpdateRequired = false;
+      document.getElementById('pickedPlacementInput').value = pickedPlacementLocation;
+      document.getElementById('placementUpdateModal').style.display = 'none';
+      saveSessionState();
+      navigateNextPending();
+    }
+
+    let lotSpeechTimer = null;
+    let lotSpeechActive = false;
+    let lotSpeechRunId = 0;
+
+    function stopLotSpeech() {
+      lotSpeechActive = false;
+      lotSpeechRunId += 1;
+      if (lotSpeechTimer !== null) {
+        clearTimeout(lotSpeechTimer);
+        lotSpeechTimer = null;
+      }
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      const button = document.getElementById('speakLotBtn');
+      if (button) button.textContent = '🔊 Speak lot';
+    }
+
+    function speakLotSerial(value) {
+      stopLotSpeech();
+      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
+      const lot = String(value ?? '').trim();
+      if (!lot || lot === 'N/A' || lot === '--') return;
+      const spelledLot = [...lot].map(char => char === '-' ? 'dash' : char === '/' ? 'slash' : char).join(' ');
+      lotSpeechActive = true;
+      const runId = lotSpeechRunId;
+      const button = document.getElementById('speakLotBtn');
+      if (button) button.textContent = '⏹ Stop reading';
+      const speakAgain = () => {
+        if (!lotSpeechActive || runId !== lotSpeechRunId) return;
+        const visibleLot = String(document.getElementById('lotDisplay')?.textContent ?? '').trim();
+        if (visibleLot !== lot) return;
+        const utterance = new SpeechSynthesisUtterance(`Lot number: ${spelledLot}`);
+        utterance.rate = 0.88;
+        utterance.onend = () => {
+          if (lotSpeechActive && runId === lotSpeechRunId) lotSpeechTimer = setTimeout(speakAgain, 2000);
+        };
+        utterance.onerror = () => {
+          if (lotSpeechActive && runId === lotSpeechRunId) lotSpeechTimer = setTimeout(speakAgain, 2000);
+        };
+        window.speechSynthesis.speak(utterance);
+      };
+      speakAgain();
+    }
+
+    function toggleLotSpeech() {
+      if (lotSpeechActive) stopLotSpeech();
+      else speakLotSerial(pickList[currentIndex]?.lot);
+    }
+
     function confirmFullPicked() {
       const item = pickList[currentIndex];
+      const newlyConfirmed = !item.itemPicked;
       item.itemPicked = true;
       item.comment = document.getElementById('itemComment').value.trim();
+      pickedPlacementLocation = cleanPlacementValue(document.getElementById('pickedPlacementInput').value);
+      item.pickedPlacement = pickedPlacementLocation;
+      if (newlyConfirmed) confirmedPickCount += 1;
 
       const pSize = parseInt(document.getElementById('packSize').value) || 0;
       if (pSize > 0) {
@@ -2024,6 +2171,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
       updateStatusBadge();
       renderSummaryTable();
+      updatePlacementHint();
+      if (newlyConfirmed && confirmedPickCount > 0 && confirmedPickCount % 10 === 0) {
+        placementUpdateRequired = true;
+        document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
+        document.getElementById('placementUpdateModal').style.display = 'flex';
+        document.getElementById('placementUpdateInput').focus();
+        saveSessionState();
+        return;
+      }
       navigateNextPending();
     }
 
@@ -2131,6 +2287,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('pickedQtyInput').value = item.finalPickedQty;
       document.getElementById('pickedQtyInput').disabled = true;
       document.getElementById('itemComment').value = item.comment || "";
+      document.getElementById('pickedPlacementInput').value = item.itemPicked && item.pickedPlacement !== undefined
+        ? cleanPlacementValue(item.pickedPlacement)
+        : cleanPlacementValue(pickedPlacementLocation);
 
       document.getElementById('locDisplay').innerText = item.location;
       document.getElementById('itemCodeDisplay').innerText = `ITEM: ${item.code}`;
@@ -2157,7 +2316,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       updateLotUIState();
       updateStatusBadge();
+      updatePlacementHint();
       calculateLogicalBreakdown(item.finalPickedQty);
+      speakLotSerial(item.lot);
 
       document.getElementById('prevBtn').disabled = currentIndex === 0;
     }
@@ -2350,6 +2511,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const statusText = isPending ? "PENDING" : (isAdjusted ? "ADJUSTED" : "PICKED");
 
         let remarks = item.comment || "";
+        if (item.pickedPlacement) {
+          remarks = remarks ? `${remarks} | Placement: ${item.pickedPlacement}` : `Placement: ${item.pickedPlacement}`;
+        }
         if (nearExp) {
           remarks = remarks ? `Near Expiry | ${remarks}` : "Near Expiry";
         }
