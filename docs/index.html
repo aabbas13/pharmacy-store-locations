@@ -1255,10 +1255,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     // Google Sheets Location Master with a durable, device-local offline copy.
-    const HMC_LOCATION_SHEET_ID = '1Zxlt-mEVGEnufk6rb_tI3BUxg2ZLGcmE4I63wUYItnE';
+    const HMC_LOCATION_SHEET_ID = '1PFGWByMQOtPPwQmANk7kOMwWz0d04tx3gphMUTyWwZc';
     const HMC_LOCATION_DB = 'hmc-location-master-cache-v1';
     const HMC_LOCATION_STORE = 'masters';
-    const HMC_LOCATION_CACHE_KEY = 'latest';
+    const HMC_LOCATION_CACHE_KEY = `latest:${HMC_LOCATION_SHEET_ID}`;
     const HMC_LOCATION_SOURCE_KEY = 'original-source-workbook';
 
     function openLocationCacheDb() {
