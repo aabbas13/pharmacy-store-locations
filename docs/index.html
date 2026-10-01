@@ -837,7 +837,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         sessionStorage.setItem('hmc_app_version', HMC_APP_VERSION);
       }
       restoreSessionState();
-      restoreGoogleLocationCache();
+      // Restore the offline copy first, then fetch the current Google Sheet.
+      // This keeps locations available immediately offline and prevents a new
+      // browser/device from leaving every pick slip row on its generic locator.
+      restoreGoogleLocationCache().finally(() => refreshGoogleLocationMaster());
       renderSavedSessionsList();
       setupCalcKeyboardListeners();
     });
@@ -1420,7 +1423,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           }
           const cachedTime = cached.refreshedAt ? new Date(cached.refreshedAt).toLocaleString() : 'time unknown';
           const active = Object.keys(locationMap).length;
-          updateGoogleLocationStatus(`${active.toLocaleString()} locations ready · last sheet refresh ${cachedTime} · fingerprint ${cached.fingerprint}`, 'ok');
+          const matchedItems = pickList.filter(item => item.locationMatched).length;
+          const matchSummary = pickList.length ? ` · ${matchedItems}/${pickList.length} pick slip rows matched` : '';
+          updateGoogleLocationStatus(`${active.toLocaleString()} locations ready · last sheet refresh ${cachedTime} · fingerprint ${cached.fingerprint}${matchSummary}`, 'ok');
           if (pickList.length) {
             renderCurrentItem();
             renderSummaryTable();
@@ -1457,7 +1462,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         applyLocationMapToPickList();
         saveSessionState();
         document.getElementById('locStatus').innerText = `✓ Loaded ${Object.keys(locationMap).length} locations from Google Sheets`;
-        updateGoogleLocationStatus(`Connected · ${Object.keys(locationMap).length.toLocaleString()} locations · ${new Date(saved.refreshedAt).toLocaleString()} · fingerprint ${saved.fingerprint}`, 'ok');
+        const matchedItems = pickList.filter(item => item.locationMatched).length;
+        const matchSummary = pickList.length ? ` · ${matchedItems}/${pickList.length} pick slip rows matched` : '';
+        updateGoogleLocationStatus(`Connected · ${Object.keys(locationMap).length.toLocaleString()} locations${matchSummary} · ${new Date(saved.refreshedAt).toLocaleString()} · fingerprint ${saved.fingerprint}`, 'ok');
         if (pickList.length) {
           renderCurrentItem();
           renderSummaryTable();
