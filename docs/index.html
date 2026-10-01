@@ -73,13 +73,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .badge-pending { background: #fef3c7; color: var(--warning); }
     .badge-done { background: #dcfce7; color: var(--success); }
 
-    .location-box { background: #f0f9ff; border-left: 5px solid var(--primary); padding: 12px; border-radius: 6px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
-    .location-title { font-size: 0.75rem; color: var(--muted); font-weight: bold; }
-    .location-value { font-size: 1.6rem; font-weight: bold; color: #0369a1; letter-spacing: 0.5px; }
+    .location-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 6px 9px; border-radius: 6px; margin: 5px 0 7px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+    .location-title { font-size: 0.65rem; color: #6d28d9; font-weight: bold; }
+    .location-value { font-size: 0.8rem; line-height: 1.15; white-space: pre-line; font-weight: 750; color: #7c3aed; letter-spacing: 0.25px; overflow-wrap: anywhere; }
     .btn-edit-loc { background: #e0f2fe; color: #0369a1; border: 1px solid #0284c7; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer; }
 
-    .item-code { font-size: 0.85rem; font-weight: bold; color: var(--muted); display: flex; justify-content: space-between; }
-    .item-name { font-size: 1.05rem; font-weight: bold; margin-bottom: 8px; color: var(--text); text-align: left; }
+    .item-code { font-size: 0.85rem; font-weight: bold; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 2px 0; }
+    .item-code #itemCodeDisplay { font-size: clamp(1.1rem, 6vw, 1.7rem); line-height: 1.05; color: var(--primary); overflow-wrap: anywhere; }
+    .item-code #lineNumDisplay { flex: 0 0 auto; font-size: 0.75rem !important; }
+    .item-name { font-size: 1rem; font-weight: bold; margin-bottom: 5px; color: var(--text); text-align: left; }
     .item-name.generic-item-highlight {
       background: #fef3c7;
       border: 2px solid #f59e0b;
@@ -97,12 +99,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       border-left: 4px solid #f59e0b;
     }
 
-    .item-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #475569; margin-bottom: 12px; background: #f1f5f9; padding: 8px 12px; border-radius: 6px; }
-    .lot-value { display: block; color: #172554; font-size: clamp(1.8rem, 8vw, 2.8rem); line-height: 1.12; font-weight: 850; letter-spacing: 0.12em; overflow-wrap: anywhere; margin-top: 3px; }
-    .speak-lot-btn { padding: 5px 9px; margin-top: 5px; font-size: 0.8rem; border-radius: 7px; }
-    .placement-box { margin: 10px 0 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 9px; background: #f8fafc; }
-    .placement-box input { max-width: 180px; font-size: 1.2rem; font-weight: 750; letter-spacing: 0.2em; text-align: center; }
-    .placement-hint { font-size: 0.8rem; color: var(--muted); margin: 5px 0 0; }
+    .item-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; color: #6d28d9; margin: 5px 0 7px; background: #faf5ff; padding: 6px 9px; border-radius: 6px; }
+    .item-meta > div:first-child { flex: 1; min-width: 0; }
+    .lot-value { display: block; color: #7c3aed; font-size: clamp(0.9rem, 4vw, 1.4rem); line-height: 1.08; font-weight: 850; letter-spacing: 0.06em; overflow-wrap: anywhere; margin-top: 1px; }
+    .speak-lot-btn { padding: 3px 7px; margin-top: 2px; font-size: 0.72rem; border-radius: 7px; }
+    .placement-box { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; margin: 4px 0 6px; padding: 6px 8px; border: 1px solid #ddd6fe; border-radius: 8px; background: #faf5ff; }
+    .placement-box > label { margin: 0; font-size: 0.68rem; }
+    .placement-box input { width: 25%; min-width: 76px; max-width: 128px; padding: 5px 7px; font-size: 0.95rem; font-weight: 750; letter-spacing: 0.12em; text-align: center; }
+    .placement-help { flex: 1 0 100%; color: var(--muted); font-size: 0.72rem; }
+    .placement-help summary { width: fit-content; color: #6d28d9; cursor: pointer; font-weight: 650; }
+    .placement-help p { margin: 4px 0 0; }
+    .picker-main-actions { display: flex; gap: 8px; margin: 6px 0 10px; }
+    .picker-main-actions > * { flex: 1; min-width: 0; }
+    .picker-main-actions .confirm-item-btn { margin: 0; padding: 10px 7px; font-size: 0.9rem; }
+    .picker-main-actions .next-pending-btn { padding: 10px 7px; font-size: 0.9rem; }
+    .picker-secondary-details { margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; background: #fff; }
+    .picker-secondary-details > summary { color: var(--muted); cursor: pointer; font-size: 0.82rem; font-weight: 700; }
+    .picker-secondary-details[open] > summary { margin-bottom: 9px; }
     .placement-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(15,23,42,.62); }
     .placement-modal-card { width: min(100%, 420px); padding: 20px; border-radius: 14px; background: #fff; box-shadow: 0 20px 60px #0004; }
     .placement-modal-card h2 { margin: 0 0 8px; color: var(--primary); }
@@ -140,6 +153,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     button.export-pkg-btn { background: var(--pkg-btn); color: white; width: 100%; margin-top: 8px; }
     button.save-pkg-btn { background: #6366f1; color: white; font-size: 0.82rem; padding: 10px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
     button.reset-btn { background: #ef4444; color: white; width: 100%; margin-top: 8px; }
+    button.clear-web-data-btn { flex: 0 0 auto; width: auto; padding: 10px 12px; background: #b42318; color: #fff; font-size: 0.85rem; }
 
     /* Interactive Table View Styling */
     .view-toggle { display: flex; gap: 8px; margin-bottom: 12px; }
@@ -186,8 +200,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <div class="card" style="padding:10px 14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
     <button type="button" id="refreshGoogleLocations" style="background:#12665b; color:white;">↻ Refresh Location Master</button>
+    <button type="button" class="clear-web-data-btn" onclick="clearAllHelperBrowserData()">Clear Saved Web Data</button>
     <small id="googleLocationStatus" role="status" aria-live="polite" style="font-size:0.8rem; flex:1; min-width:190px;">Checking saved location data…</small>
-    <small style="color:#52645d; font-size:0.72rem; width:100%;">Uses the HMC Google Sheet anonymously; the last successful copy is saved on this device for offline use. Excel import remains available.</small>
+    <small style="color:#52645d; font-size:0.72rem; width:100%;">Uses the HMC Google Sheet anonymously; the last successful copy is saved on this device for offline use. Excel import remains available. Clear Saved Web Data removes this helper’s saved sessions and location cache, then reloads the latest app.</small>
     <small id="sessionPersistenceStatus" role="status" aria-live="polite" style="font-size:0.72rem; width:100%; color:#52645d;">Pick progress saves automatically on this device, keyed by pick-slip cell D2.</small>
   </div>
 
@@ -275,15 +290,34 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <!-- Step 2A: Item 1-by-1 View -->
   <div id="pickerCard" class="card hidden">
     <!-- Live Item / Description Search -->
-    <div class="search-box">
-      <label>🔍 Quick Jump Search (Item Code / Description)</label>
-      <input type="text" id="itemSearchInput" placeholder="Type Item Code or Description..." oninput="handleSearchInput()">
-      <div id="searchResults" class="search-results"></div>
-    </div>
+    <details class="picker-secondary-details">
+      <summary>🔍 Find another item</summary>
+      <div class="search-box">
+        <label>Quick Jump Search (Item Code / Description)</label>
+        <input type="text" id="itemSearchInput" placeholder="Type Item Code or Description..." oninput="handleSearchInput()">
+        <div id="searchResults" class="search-results"></div>
+      </div>
+    </details>
 
     <div class="item-header">
       <span class="item-counter" id="itemCounter">Item 1 of --</span>
       <span id="statusBadge" class="status-badge badge-pending">PENDING</span>
+    </div>
+
+    <div class="item-code">
+      <span id="itemCodeDisplay">ITEM: --</span>
+      <span id="lineNumDisplay" style="color: var(--primary);">LINE: --</span>
+    </div>
+    <div class="item-name" id="itemNameDisplay">--</div>
+
+    <div class="placement-box">
+      <label for="pickedPlacementInput">Picked item placement</label>
+      <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Up to 4 chars">
+      <details class="placement-help">
+        <summary>Placement explanation</summary>
+        <p>Enter up to 4 characters to record where you placed the picked item. It can be changed any time or left blank. The helper asks for an update after every 10 confirmed picks.</p>
+        <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
+      </details>
     </div>
 
     <div class="location-box">
@@ -294,21 +328,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <button class="btn-edit-loc" onclick="openLocationEditModal()">✏️ Edit</button>
     </div>
 
-    <div class="item-code">
-      <span id="itemCodeDisplay">ITEM: --</span>
-      <span id="lineNumDisplay" style="color: var(--primary);">LINE: --</span>
-    </div>
-    <div class="item-name" id="itemNameDisplay">--</div>
-
     <div class="item-meta">
       <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Speak lot</button></div>
       <div><b>EXP</b><br><span id="expDisplay"></span></div>
-    </div>
-
-    <div class="placement-box">
-      <label for="pickedPlacementInput">Picked item placement (up to 4 characters)</label>
-      <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Blank allowed">
-      <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
     </div>
 
     <div style="margin-bottom: 12px;">
@@ -328,6 +350,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <button class="secondary" onclick="toggleQtyEdit()" style="padding: 8px; font-size:0.8rem; flex:0.6;">✏️ Edit</button>
     </div>
 
+    <div class="picker-main-actions">
+      <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Item Picked</button>
+      <button type="button" class="secondary next-pending-btn" onclick="navigateNextPending()">Next Pending</button>
+    </div>
+
+    <details class="picker-secondary-details">
+      <summary>📦 Packaging details and quantity breakdown</summary>
     <!-- Packaging Inputs -->
     <label>Packaging Configuration (Pack × Carton × Catch)</label>
     <div class="inline-config">
@@ -378,15 +407,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="calc-lbl">Strips</div>
       </div>
     </div>
+    </details>
 
     <!-- Optional Comment Input -->
-    <div class="comment-box">
-      <label for="itemComment">Optional Picking Notes / Remarks</label>
-      <textarea id="itemComment" placeholder="Add optional comments (e.g., damaged box, partial batch, short pick reason)..." disabled></textarea>
-    </div>
+    <details class="picker-secondary-details">
+      <summary>📝 Add optional picking remarks</summary>
+      <div class="comment-box">
+        <label for="itemComment">Picking Notes / Remarks</label>
+        <textarea id="itemComment" placeholder="For example: damaged box, partial batch, or short pick reason" disabled></textarea>
+      </div>
+    </details>
 
-    <!-- Confirm Item Picked -->
-    <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Item Picked</button>
   </div>
 
   <div id="placementUpdateModal" class="placement-modal" role="dialog" aria-modal="true" aria-labelledby="placementModalTitle">
@@ -956,6 +987,42 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         location.reload();
       } catch (error) {
         alert(`Could not clear the saved session: ${error.message || error}`);
+      }
+    }
+
+    function deleteHelperDatabase(databaseName) {
+      return new Promise((resolve, reject) => {
+        if (!('indexedDB' in window)) return resolve();
+        const request = indexedDB.deleteDatabase(databaseName);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error || new Error(`Could not delete ${databaseName}.`));
+        request.onblocked = () => reject(new Error(`The saved data is open in another tab. Close other copies of this picker and try again.`));
+      });
+    }
+
+    async function clearAllHelperBrowserData() {
+      const confirmed = confirm(
+        'Clear this picker’s saved web data? This deletes all saved pick sessions on this device, the offline Location Master cache, and this tab’s saved progress. It cannot be undone.'
+      );
+      if (!confirmed) return;
+
+      if (sessionSaveTimer) {
+        clearTimeout(sessionSaveTimer);
+        sessionSaveTimer = null;
+      }
+
+      try {
+        await Promise.all([
+          deleteHelperDatabase(HMC_SESSION_DB),
+          deleteHelperDatabase(HMC_LOCATION_DB)
+        ]);
+        for (let index = sessionStorage.length - 1; index >= 0; index--) {
+          const key = sessionStorage.key(index);
+          if (key && key.startsWith('hmc_')) sessionStorage.removeItem(key);
+        }
+        location.reload();
+      } catch (error) {
+        alert(`Could not clear all picker data: ${error.message || error}`);
       }
     }
 
@@ -2357,6 +2424,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         ? 'GENERIC ITEM — Item Description contains GENERIC.'
         : '';
       document.getElementById('lotDisplay').innerText = item.lot;
+      const lotLength = String(item.lot ?? '').replace(/\s/g, '').length;
+      const baseLotSize = Math.max(0.9, Math.min(1.4, window.innerWidth * 0.04 / 16));
+      const lotFontSize = Math.max(0.65, baseLotSize * (18 / Math.max(lotLength, 18)));
+      document.getElementById('lotDisplay').style.fontSize = `${lotFontSize}rem`;
       document.getElementById('expDisplay').innerText = item.expiry;
 
       if (packagingDb[item.code]) {
