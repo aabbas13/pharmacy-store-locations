@@ -73,13 +73,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .badge-pending { background: #fef3c7; color: var(--warning); }
     .badge-done { background: #dcfce7; color: var(--success); }
 
-    .location-box { background: #faf5ff; border-left: 3px solid #7c3aed; padding: 6px 9px; border-radius: 6px; margin: 5px 0 7px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
-    .location-title { font-size: 0.65rem; color: #6d28d9; font-weight: bold; }
-    .location-value { font-size: 0.8rem; line-height: 1.15; white-space: pre-line; font-weight: 750; color: #7c3aed; letter-spacing: 0.25px; overflow-wrap: anywhere; }
-    .btn-edit-loc { background: #e0f2fe; color: #0369a1; border: 1px solid #0284c7; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: bold; cursor: pointer; }
+    .location-box { background: #eff6ff; border-left: 3px solid #2563eb; padding: 5px 8px; border-radius: 6px; margin: 4px 0 6px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+    .location-title { font-size: 0.62rem; color: #1d4ed8; font-weight: bold; }
+    .location-value { font-size: 0.8rem; line-height: 1.15; white-space: pre-line; font-weight: 750; color: #1d4ed8; letter-spacing: 0.25px; overflow-wrap: anywhere; }
+    .btn-edit-loc { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; padding: 3px 6px; border-radius: 6px; font-size: 0.62rem; font-weight: bold; cursor: pointer; }
 
     .item-code { font-size: 0.85rem; font-weight: bold; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 2px 0; }
-    .item-code #itemCodeDisplay { font-size: clamp(1.1rem, 6vw, 1.7rem); line-height: 1.05; color: var(--primary); overflow-wrap: anywhere; }
+    .item-code #itemCodeDisplay { font-size: 0.85rem; line-height: 1.05; color: var(--primary); overflow-wrap: anywhere; }
     .item-code #lineNumDisplay { flex: 0 0 auto; font-size: 0.75rem !important; }
     .item-name { font-size: 1rem; font-weight: bold; margin-bottom: 5px; color: var(--text); text-align: left; }
     .item-name.generic-item-highlight {
@@ -99,21 +99,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       border-left: 4px solid #f59e0b;
     }
 
-    .item-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; color: #6d28d9; margin: 5px 0 7px; background: #faf5ff; padding: 6px 9px; border-radius: 6px; }
+    .item-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; color: #1d4ed8; margin: 4px 0 6px; background: #eff6ff; padding: 5px 8px; border-radius: 6px; }
     .item-meta > div:first-child { flex: 1; min-width: 0; }
-    .lot-value { display: block; color: #7c3aed; font-size: clamp(0.9rem, 4vw, 1.4rem); line-height: 1.08; font-weight: 850; letter-spacing: 0.06em; overflow-wrap: anywhere; margin-top: 1px; }
+    .lot-value { display: block; color: #1d4ed8; font-size: clamp(1.35rem, 6vw, 2.1rem); line-height: 1.08; font-weight: 850; letter-spacing: 0.06em; overflow-wrap: anywhere; margin-top: 1px; }
     .speak-lot-btn { padding: 3px 7px; margin-top: 2px; font-size: 0.72rem; border-radius: 7px; }
-    .placement-box { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; margin: 4px 0 6px; padding: 6px 8px; border: 1px solid #ddd6fe; border-radius: 8px; background: #faf5ff; }
-    .placement-box > label { margin: 0; font-size: 0.68rem; }
-    .placement-box input { width: 25%; min-width: 76px; max-width: 128px; padding: 5px 7px; font-size: 0.95rem; font-weight: 750; letter-spacing: 0.12em; text-align: center; }
-    .placement-help { flex: 1 0 100%; color: var(--muted); font-size: 0.72rem; }
-    .placement-help summary { width: fit-content; color: #6d28d9; cursor: pointer; font-weight: 650; }
+    .placement-box { display: block; flex: 0 0 78px; margin: 0; padding: 4px; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; text-align: center; }
+    .placement-box > label { margin: 0 0 2px; font-size: 0.56rem; }
+    .placement-box input { width: 100%; min-width: 0; max-width: none; padding: 4px 3px; font-size: 0.82rem; font-weight: 750; letter-spacing: 0.08em; text-align: center; }
+    .placement-help { color: var(--muted); font-size: 0.65rem; text-align: left; }
+    .placement-help summary { width: fit-content; margin: 2px auto 0; color: #1d4ed8; cursor: pointer; font-weight: 650; }
     .placement-help p { margin: 4px 0 0; }
-    .picker-main-actions { display: flex; gap: 8px; margin: 6px 0 10px; }
-    .picker-main-actions > * { flex: 1; min-width: 0; }
-    .picker-main-actions .confirm-item-btn { margin: 0; padding: 10px 7px; font-size: 0.9rem; }
-    .picker-main-actions .next-pending-btn { padding: 10px 7px; font-size: 0.9rem; }
-    .picker-secondary-details { margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; background: #fff; }
+    .picker-main-actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 6px; margin: 5px 0 9px; }
+    .confirm-placement-group { display: flex; align-items: stretch; gap: 5px; min-width: 0; }
+    .confirm-placement-group #confirmItemBtn { flex: 1; min-width: 0; margin: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
+    .picker-main-actions .next-pending-btn { min-width: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
+    .picker-secondary-details { margin: 5px 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: #fff; scroll-margin-top: 10px; }
     .picker-secondary-details > summary { color: var(--muted); cursor: pointer; font-size: 0.82rem; font-weight: 700; }
     .picker-secondary-details[open] > summary { margin-bottom: 9px; }
     .placement-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(15,23,42,.62); }
@@ -310,16 +310,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div class="item-name" id="itemNameDisplay">--</div>
 
-    <div class="placement-box">
-      <label for="pickedPlacementInput">Picked item placement</label>
-      <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Up to 4 chars">
-      <details class="placement-help">
-        <summary>Placement explanation</summary>
-        <p>Enter up to 4 characters to record where you placed the picked item. It can be changed any time or left blank. The helper asks for an update after every 10 confirmed picks.</p>
-        <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
-      </details>
-    </div>
-
     <div class="location-box">
       <div>
         <div class="location-title">SHELF LOCATION</div>
@@ -329,9 +319,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
 
     <div class="item-meta">
-      <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Speak lot</button></div>
+      <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Read lot</button></div>
       <div><b>EXP</b><br><span id="expDisplay"></span></div>
     </div>
+
+    <details class="picker-secondary-details">
+      <summary>📦 Packaging details and quantity breakdown</summary>
+      <label>Packaging Configuration (Pack × Carton × Catch)</label>
+      <div class="inline-config">
+        <div class="inline-col">
+          <label>Pack Size</label>
+          <input type="number" id="packSize" placeholder="Units/Pk" style="text-align:center;" disabled>
+        </div>
+        <div class="inline-symbol">×</div>
+        <div class="inline-col">
+          <label>Carton Size</label>
+          <input type="number" id="cartonSizeInPacks" placeholder="Pks/Ctn" style="text-align:center;" disabled>
+        </div>
+        <div class="inline-symbol">×</div>
+        <div class="inline-col">
+          <label>Catch Size</label>
+          <input type="number" id="catchSizeInPacks" placeholder="Pks/Ctch" style="text-align:center;" disabled>
+        </div>
+      </div>
+      <div class="pkg-row-2">
+        <div style="flex: 1;">
+          <label>Strip Size (Units/Strip)</label>
+          <input type="number" id="stripSize" placeholder="1" style="text-align:center;" disabled>
+        </div>
+        <div style="flex: 1.2;">
+          <button id="savePkgBtn" class="save-pkg-btn" onclick="saveCurrentItemPackaging()" disabled>💾 Save Packaging Data</button>
+        </div>
+      </div>
+      <label>Calculated Breakdown</label>
+      <div class="grid-4">
+        <div class="calc-box"><div class="calc-val" id="resCartons">0</div><div class="calc-lbl">Cartons</div></div>
+        <div class="calc-box"><div class="calc-val" id="resCatches">0</div><div class="calc-lbl">Catches</div></div>
+        <div class="calc-box"><div class="calc-val" id="resPacks">0</div><div class="calc-lbl">Packs</div></div>
+        <div class="calc-box"><div class="calc-val" id="resStrips">0</div><div class="calc-lbl">Strips</div></div>
+      </div>
+    </details>
 
     <div style="margin-bottom: 12px;">
       <button id="lotConfirmBtn" class="btn-lot" onclick="toggleLotCheck()">⚠️ Check & Confirm Lot First</button>
@@ -351,63 +378,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
 
     <div class="picker-main-actions">
-      <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Item Picked</button>
+      <div class="confirm-placement-group">
+        <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
+        <div class="placement-box">
+          <label for="pickedPlacementInput">Placement</label>
+          <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="4 chars">
+          <details class="placement-help">
+            <summary>Why?</summary>
+            <p>Enter up to 4 characters to record where you placed this item. It may be changed any time or left blank. An update is requested after every 10 confirmed picks.</p>
+            <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
+          </details>
+        </div>
+      </div>
       <button type="button" class="secondary next-pending-btn" onclick="navigateNextPending()">Next Pending</button>
     </div>
-
-    <details class="picker-secondary-details">
-      <summary>📦 Packaging details and quantity breakdown</summary>
-    <!-- Packaging Inputs -->
-    <label>Packaging Configuration (Pack × Carton × Catch)</label>
-    <div class="inline-config">
-      <div class="inline-col">
-        <label>Pack Size</label>
-        <input type="number" id="packSize" placeholder="Units/Pk" style="text-align:center;" disabled>
-      </div>
-      <div class="inline-symbol">×</div>
-      <div class="inline-col">
-        <label>Carton Size</label>
-        <input type="number" id="cartonSizeInPacks" placeholder="Pks/Ctn" style="text-align:center;" disabled>
-      </div>
-      <div class="inline-symbol">×</div>
-      <div class="inline-col">
-        <label>Catch Size</label>
-        <input type="number" id="catchSizeInPacks" placeholder="Pks/Ctch" style="text-align:center;" disabled>
-      </div>
-    </div>
-
-    <!-- Strip Size & Save Packaging Button -->
-    <div class="pkg-row-2">
-      <div style="flex: 1;">
-        <label>Strip Size (Units/Strip)</label>
-        <input type="number" id="stripSize" placeholder="1" style="text-align:center;" disabled>
-      </div>
-      <div style="flex: 1.2;">
-        <button id="savePkgBtn" class="save-pkg-btn" onclick="saveCurrentItemPackaging()" disabled>💾 Save Packaging Data</button>
-      </div>
-    </div>
-
-    <!-- Calculated Output Summary -->
-    <label>Calculated Breakdown</label>
-    <div class="grid-4">
-      <div class="calc-box">
-        <div class="calc-val" id="resCartons">0</div>
-        <div class="calc-lbl">Cartons</div>
-      </div>
-      <div class="calc-box">
-        <div class="calc-val" id="resCatches">0</div>
-        <div class="calc-lbl">Catches</div>
-      </div>
-      <div class="calc-box">
-        <div class="calc-val" id="resPacks">0</div>
-        <div class="calc-lbl">Packs</div>
-      </div>
-      <div class="calc-box">
-        <div class="calc-val" id="resStrips">0</div>
-        <div class="calc-lbl">Strips</div>
-      </div>
-    </div>
-    </details>
 
     <!-- Optional Comment Input -->
     <details class="picker-secondary-details">
@@ -2132,6 +2116,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment'];
 
       if (item.lotConfirmed) {
+        stopLotSpeech();
         btn.innerText = "✅ Lot & Exp Confirmed";
         btn.classList.add('confirmed');
         inputs.forEach(id => document.getElementById(id).disabled = false);
@@ -2243,7 +2228,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       if ('speechSynthesis' in window) window.speechSynthesis.cancel();
       const button = document.getElementById('speakLotBtn');
-      if (button) button.textContent = '🔊 Speak lot';
+      if (button) button.textContent = '🔊 Read lot';
     }
 
     function speakLotSerial(value) {
@@ -2256,21 +2241,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const runId = lotSpeechRunId;
       const button = document.getElementById('speakLotBtn');
       if (button) button.textContent = '⏹ Stop reading';
-      const speakAgain = () => {
-        if (!lotSpeechActive || runId !== lotSpeechRunId) return;
-        const visibleLot = String(document.getElementById('lotDisplay')?.textContent ?? '').trim();
-        if (visibleLot !== lot) return;
-        const utterance = new SpeechSynthesisUtterance(`Lot number: ${spelledLot}`);
-        utterance.rate = 0.88;
-        utterance.onend = () => {
-          if (lotSpeechActive && runId === lotSpeechRunId) lotSpeechTimer = setTimeout(speakAgain, 2000);
-        };
-        utterance.onerror = () => {
-          if (lotSpeechActive && runId === lotSpeechRunId) lotSpeechTimer = setTimeout(speakAgain, 2000);
-        };
-        window.speechSynthesis.speak(utterance);
+      const utterance = new SpeechSynthesisUtterance(`Lot number: ${spelledLot}`);
+      utterance.rate = 0.88;
+      const finishReading = () => {
+        if (runId !== lotSpeechRunId) return;
+        lotSpeechActive = false;
+        if (button) button.textContent = '🔊 Read lot';
       };
-      speakAgain();
+      utterance.onend = finishReading;
+      utterance.onerror = finishReading;
+      window.speechSynthesis.speak(utterance);
     }
 
     function toggleLotSpeech() {
@@ -2446,9 +2426,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateStatusBadge();
       updatePlacementHint();
       calculateLogicalBreakdown(item.finalPickedQty);
-      speakLotSerial(item.lot);
+      if (item.lotConfirmed) stopLotSpeech();
+      else speakLotSerial(item.lot);
 
       document.getElementById('prevBtn').disabled = currentIndex === 0;
+      document.getElementById('pickerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function renderSummaryTable() {
