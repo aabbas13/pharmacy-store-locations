@@ -43,6 +43,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body { background-color: var(--bg); color: var(--text); padding: 12px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100vh; }
 
+    .app-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 0 10px; border-radius: 11px; background: #e2e8f0; }
+    .app-tab { display: block; text-align: center; padding: 9px 8px; border: 0; border-radius: 8px; color: #334155; background: #e2e8f0; text-decoration: none; font-size: .8rem; font-weight: 800; cursor: pointer; }
+    .app-tab.active { color: #fff; background: var(--primary); box-shadow: 0 1px 4px #0f172a22; }
+
     header { background: var(--primary); color: white; padding: 14px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     .header-title-box { display: flex; flex: 1; min-width: 0; flex-direction: column; text-align: left; }
     .header-main { font-weight: bold; font-size: 1.05rem; }
@@ -55,12 +59,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .voice-commands-help > summary { color: #1d4ed8; cursor: pointer; font-size: 0.76rem; font-weight: 700; }
     .voice-commands-help ul { margin: 7px 0 5px 18px; padding: 0; color: #334155; font-size: 0.74rem; line-height: 1.4; }
     .voice-commands-help p { color: #475569; font-size: 0.72rem; margin-top: 5px; }
+    .voice-phrase-settings { display: grid; gap: 6px; margin: 8px 0; }
+    .voice-phrase-row { display: grid; grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr); gap: 7px; align-items: center; }
+    .voice-phrase-row label { font-size: 0.72rem; color: #334155; }
+    .voice-phrase-row select, .voice-phrase-row input { width: 100%; min-width: 0; box-sizing: border-box; padding: 6px; font-size: 0.75rem; }
+    .voice-phrase-save { width: auto; padding: 7px 10px; font-size: 0.75rem; }
+    .voice-phrase-save-status { margin-left: 6px; }
     @media (max-width: 480px) {
       header { padding: 10px; align-items: flex-start; }
       .header-main { font-size: 0.88rem; }
       .header-sub { font-size: 0.65rem; }
       .header-actions { max-width: 60%; }
       .header-btn { padding: 5px 6px; font-size: 0.68rem; }
+      .voice-phrase-row { grid-template-columns: 1fr; gap: 3px; }
     }
 
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
@@ -136,6 +147,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     .btn-lot { background: var(--warning); color: white; width: 100%; font-size: 0.9rem; padding: 10px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; }
     .btn-lot.confirmed { background: var(--success); }
+    .item-meta > .btn-lot { width: auto; flex: 0 0 auto; max-width: 128px; padding: 7px 8px; font-size: 0.7rem; line-height: 1.15; white-space: normal; }
 
     .qty-edit-box { display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid var(--border); padding: 8px; border-radius: 8px; margin-bottom: 12px; }
 
@@ -196,9 +208,40 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .btn-zero { grid-column: span 2; aspect-ratio: auto; border-radius: 35px; justify-content: flex-start; padding-left: 22px; }
 
     .hidden { display: none !important; }
+    .identity-overlay { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 14px; background: rgba(15,23,42,.72); }
+    .identity-dialog { width: min(100%, 480px); max-height: 94vh; overflow: auto; background: #fff; border-radius: 15px; padding: 18px; box-shadow: 0 20px 60px #0005; }
+    .identity-dialog h2 { color: var(--primary); font-size: 1.1rem; margin-bottom: 6px; }
+    .identity-dialog p { color: #526071; font-size: .82rem; line-height: 1.4; margin-bottom: 12px; }
+    .identity-dialog label { display: block; font-size: .78rem; font-weight: 700; margin: 8px 0 4px; }
+    .identity-dialog input, .identity-dialog select { width: 100%; padding: 9px; border: 1px solid var(--border); border-radius: 8px; }
+    .signature-canvas { display: block; width: 100%; height: 120px; border: 1px solid #94a3b8; border-radius: 8px; background: #fff; touch-action: none; }
+    .identity-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .identity-actions button { flex: 1; }
   </style>
+
+<style>
+.double-check-app{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#172033;background:#f1f5f9;font-synthesis:none;--navy:#172554;--blue:#1d4ed8;--green:#15803d;--red:#b91c1c;--muted:#64748b;--line:#dbe3ef}.double-check-app *{box-sizing:border-box}.double-check-app{margin:0}.double-check-app button,.double-check-app input,.double-check-app textarea{font:inherit}.double-check-app button{border:0;border-radius:10px;padding:12px 16px;font-weight:750;cursor:pointer}.double-check-app button:disabled{opacity:.45;cursor:not-allowed}.double-check-app .top{background:var(--navy);color:#fff;padding:15px max(16px,calc((100vw - 980px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}.double-check-app .brand{font-weight:850;font-size:1.12rem}.double-check-app .sub{opacity:.8;font-size:.8rem;margin-top:2px}.double-check-app .app-tabs{max-width:980px;margin:10px auto 0;padding:0 14px;display:grid;grid-template-columns:1fr 1fr;gap:4px}.double-check-app .app-tab{display:block;text-align:center;padding:10px 8px;border-radius:10px;background:#e2e8f0;color:#334155;text-decoration:none;font-size:.82rem;font-weight:800}.double-check-app .app-tab.active{background:var(--navy);color:#fff;box-shadow:0 1px 4px #0f172a22}.double-check-app main{max-width:980px;margin:18px auto;padding:0 14px 40px}.double-check-app .panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 3px 12px #0f172a0b}.double-check-app .welcome h1{margin:0 0 7px;font-size:1.35rem}.double-check-app .welcome p{color:#475569;margin:0 0 14px;line-height:1.5}.double-check-app .drop{border:2px dashed #93a9c7;border-radius:13px;padding:20px;text-align:center;background:#f8fafc}.double-check-app .drop.drag{border-color:var(--blue);background:#eff6ff}.double-check-app .drop input{max-width:100%}.double-check-app .small{font-size:.78rem;color:var(--muted)}.double-check-app .hidden{display:none!important}.double-check-app .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.double-check-app .metric{background:#f1f5f9;border-radius:11px;padding:10px}.double-check-app .metric b{display:block;font-size:1.2rem}.double-check-app .metric span{font-size:.72rem;color:var(--muted)}.double-check-app .progress-wrap{height:10px;border-radius:10px;background:#e2e8f0;overflow:hidden}.double-check-app .progress{height:100%;background:#16a34a;width:0;transition:width .2s}.double-check-app .progress-label{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;color:#475569;margin:7px 0}.double-check-app .identity-overlay{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;padding:14px;background:#0f172ab8}.double-check-app .identity-dialog{width:min(100%,480px);max-height:94vh;overflow:auto;background:#fff;border-radius:15px;padding:18px;box-shadow:0 20px 60px #0005}.double-check-app .identity-dialog h2{font-size:1.1rem;margin-bottom:6px}.double-check-app .identity-dialog p{color:#475569;font-size:.82rem;line-height:1.4}.double-check-app .identity-dialog label{display:block;font-size:.78rem;font-weight:700;margin:8px 0 4px}.double-check-app .identity-dialog input,.double-check-app .identity-dialog select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px}.double-check-app .signature-canvas{display:block;width:100%;height:120px;border:1px solid #94a3b8;border-radius:8px;background:#fff;touch-action:none}.double-check-app .identity-actions{display:flex;gap:8px;margin-top:12px}.double-check-app .identity-actions button{flex:1}.double-check-app .workhead{display:flex;justify-content:space-between;align-items:center;gap:12px}.double-check-app .counter{color:var(--muted);font-size:.8rem;font-weight:700}.double-check-app .item-code{font-size:clamp(1.5rem,6vw,2.3rem);font-weight:900;letter-spacing:.02em;color:var(--navy);overflow-wrap:anywhere}.double-check-app .item-name{font-size:1.05rem;font-weight:650;margin:2px 0 14px}.double-check-app .facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.double-check-app .fact{border:1px solid var(--line);border-radius:12px;padding:11px;min-width:0}.double-check-app .fact span{display:block;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:800}.double-check-app .fact b{display:block;margin-top:3px;overflow-wrap:anywhere;font-size:1rem}.double-check-app .lot{color:#1d4ed8;font-size:1.25rem!important}.double-check-app .checktitle{font-weight:850;margin:17px 0 8px}.double-check-app .checkrow{display:grid;grid-template-columns:minmax(112px,.6fr) auto minmax(120px,1fr);gap:8px;align-items:center;padding:9px 0;border-top:1px solid #edf1f6}.double-check-app .checkrow:first-of-type{border-top:0}.double-check-app .checkname{font-weight:700;font-size:.84rem}.double-check-app .checkstate{font-size:.72rem;color:var(--muted);min-width:66px}.double-check-app .choice{display:flex;gap:6px}.double-check-app .choice button{padding:8px 12px;font-size:.75rem}.double-check-app .match{background:#dcfce7;color:#166534}.double-check-app .issue{background:#fee2e2;color:#991b1b}.double-check-app .choice button.selected{outline:2px solid currentColor;outline-offset:1px}.double-check-app .note{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:.8rem}.double-check-app .nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:15px}.double-check-app .primary{background:var(--blue);color:#fff}.double-check-app .secondary{background:#e2e8f0;color:#172033}.double-check-app .export{background:#15803d;color:white}.double-check-app .danger{background:#fee2e2;color:#991b1b}.double-check-app .actions{display:flex;gap:8px;flex-wrap:wrap}.double-check-app .banner{padding:10px 12px;border-radius:10px;margin:10px 0;font-size:.82rem}.double-check-app .banner.warn{background:#fff7ed;color:#9a3412}.double-check-app .banner.ok{background:#f0fdf4;color:#166534}.double-check-app .fieldlabel{display:block;font-size:.78rem;font-weight:700;margin:12px 0 5px}.double-check-app .field{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px}
+    @media(max-width:600px){.double-check-app main{margin:10px auto;padding:0 9px 25px}.double-check-app .panel{padding:13px;border-radius:13px}.double-check-app .top{padding:12px}.double-check-app .app-tabs{padding:0 9px}.double-check-app .summary{grid-template-columns:repeat(2,1fr)}.double-check-app .facts{gap:7px}.double-check-app .fact{padding:9px}.double-check-app .checkrow{grid-template-columns:1fr auto;gap:5px}.double-check-app .checkstate{grid-column:1}.double-check-app .choice{grid-column:2;grid-row:1/ span 2}.double-check-app .note{grid-column:1/-1}.double-check-app .nav button{padding:11px 12px}}
+</style>
 </head>
 <body>
+
+  <div id="pickedBySetup" class="identity-overlay" role="dialog" aria-modal="true" aria-labelledby="pickedByTitle">
+    <form class="identity-dialog" onsubmit="completePickedBySetup(event)">
+      <h2 id="pickedByTitle">Who is picking this session?</h2>
+      <p>Enter your identity once for this pick session. It will be added beside “Picked By” in the generated report and saved when you resume this session.</p>
+      <label for="pickedByMethod">Identification method</label>
+      <select id="pickedByMethod" onchange="updatePickedByMethod()"><option value="name">Name</option><option value="initials">Initials</option><option value="signature">Draw signature</option></select>
+      <label id="pickedByValueLabel" for="pickedByValue">Name</label>
+      <input id="pickedByValue" maxlength="80" autocomplete="name" required placeholder="Enter picker name">
+      <div id="pickedSignatureWrap" class="hidden">
+        <label>Draw your signature</label>
+        <canvas id="pickedSignatureCanvas" class="signature-canvas" width="900" height="240" aria-label="Draw your picker signature"></canvas>
+        <button type="button" class="secondary" onclick="clearIdentitySignature('pickedSignatureCanvas')" style="margin-top:6px;padding:7px 10px;font-size:.75rem;">Clear signature</button>
+      </div>
+      <div class="identity-actions"><button class="primary" type="submit">Start Picking</button></div>
+    </form>
+  </div>
 
   <header>
     <div class="header-title-box">
@@ -211,6 +254,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <button class="header-btn" onclick="openCalculator()">🧮 Calc</button>
     </div>
   </header>
+
+  <nav class="app-tabs" aria-label="HMC apps">
+    <button type="button" id="pickerTabButton" class="app-tab active" aria-current="page" onclick="switchAppView('picker')">📦 Pick Helper</button>
+    <button type="button" id="doubleCheckTabButton" class="app-tab" onclick="switchAppView('doublecheck')">✓ Double Check</button>
+  </nav>
+
+  <div id="pickerAppView">
 
   <div class="card" style="padding:10px 14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
     <button type="button" id="refreshGoogleLocations" style="background:#12665b; color:white;">↻ Refresh Location Master</button>
@@ -320,17 +370,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <small id="voiceStatus" class="voice-status" role="status" aria-live="polite">Voice mode is off. Start Voice and allow microphone access. Recognition may use your browser’s speech service.</small>
     <details class="voice-commands-help">
       <summary>🎙 Voice Commands — tap to expand</summary>
-      <ul>
-        <li><strong>“Read lot”</strong> — reads the current lot once.</li>
-        <li><strong>“Read package”</strong> — reads pack, carton, catch, and strip sizes.</li>
-        <li><strong>“Pack size ten”</strong>, <strong>“carton size twelve”</strong>, <strong>“catch size four”</strong>, or <strong>“strip size six”</strong> — proposes a package value.</li>
-        <li><strong>“Save package”</strong> — saves the current package details.</li>
-        <li><strong>“Confirm lot and expiry”</strong> — confirms the displayed lot and expiry.</li>
-        <li><strong>“Confirm item picked”</strong> — confirms the current pick.</li>
-        <li><strong>“Next pending”</strong> — moves to the next unpicked item.</li>
-        <li><strong>“Read item”</strong> — reads item, location, lot, and expiry.</li>
-      </ul>
-      <p>For changes, saves, confirmations, and moving to another item, the helper asks first. Say <strong>“yes”</strong> to proceed or <strong>“no”</strong> to cancel.</p>
+      <p>Choose a phrase for each command. Choose “Custom phrase…” to enter your own wording.</p>
+      <div id="voicePhraseSettings" class="voice-phrase-settings"></div>
+      <button type="button" class="secondary voice-phrase-save" onclick="saveVoicePhraseSettings()">Save my phrases</button>
+      <small id="voicePhraseSaveStatus" class="voice-phrase-save-status" aria-live="polite"></small>
+      <p>For package sizes, keep <strong>{number}</strong> in the phrase (for example, “set pack size {number}”). Actions always ask before proceeding.</p>
+      <ul id="voiceCommandPreview"></ul>
     </details>
 
     <div class="item-code">
@@ -349,6 +394,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <div class="item-meta">
       <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Read lot</button></div>
+      <button id="lotConfirmBtn" class="btn-lot" onclick="toggleLotCheck()">⚠️ Check & Confirm Lot First</button>
       <div><b>EXP</b><br><span id="expDisplay"></span></div>
     </div>
 
@@ -388,10 +434,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="calc-box"><div class="calc-val" id="resStrips">0</div><div class="calc-lbl">Strips</div></div>
       </div>
     </details>
-
-    <div style="margin-bottom: 12px;">
-      <button id="lotConfirmBtn" class="btn-lot" onclick="toggleLotCheck()">⚠️ Check & Confirm Lot First</button>
-    </div>
 
     <!-- Editable Picked Quantity -->
     <div class="qty-edit-box">
@@ -596,7 +638,70 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
   </div>
 
+  </div>
+
+  <div id="doubleCheckApp" class="double-check-app hidden">
+<div id="checkerIdentitySetup" class="identity-overlay" role="dialog" aria-modal="true" aria-labelledby="checkerIdentityTitle">
+    <form id="checkerIdentityForm" class="identity-dialog">
+      <h2 id="checkerIdentityTitle">Who is checking this session?</h2>
+      <p>Enter your identity once for this double-check session. It will be added beside “Checked By” in the audit workbook and saved with your progress.</p>
+      <label for="checkerIdentityMethod">Identification method</label>
+      <select id="checkerIdentityMethod"><option value="name">Name</option><option value="initials">Initials</option><option value="signature">Draw signature</option></select>
+      <label id="checkerIdentityValueLabel" for="checkerIdentityValue">Checker name</label>
+      <input id="checkerIdentityValue" maxlength="80" autocomplete="name" required placeholder="Enter checker name">
+      <div id="checkerSignatureWrap" class="hidden"><label>Draw your signature</label><canvas id="checkerSignatureCanvas" class="signature-canvas" width="900" height="240" aria-label="Draw your checker signature"></canvas><button class="secondary" id="clearCheckerSignature" type="button" style="margin-top:6px;padding:7px 10px;font-size:.75rem">Clear signature</button></div>
+      <div class="identity-actions"><button class="primary" type="submit">Start Double Check</button></div>
+    </form>
+  </div>
+  <main>
+    <section id="importPanel" class="panel welcome">
+      <h1>Start a second-person check</h1>
+      <p>Load the Excel confirmation report from the picker. The checker reviews every report line, including lines still marked pending. Any issue is recorded and kept visible in the final audit.</p>
+      <div id="dropZone" class="drop"><input id="reportFile" type="file" accept=".xlsx,.xls,.csv"><p class="small">Choose or drop the generated HMC confirmation report here. The file is read in this browser.</p></div>
+      <div id="importStatus" class="small" role="status" aria-live="polite"></div>
+    </section>
+    <section id="sessionPanel" class="panel hidden">
+      <div class="workhead"><div><b id="sourceName">Report</b><div class="small" id="sessionMeta"></div></div><div class="actions"><button class="secondary" id="speakBtn" type="button">🔊 Read item</button><button class="danger" id="newReportBtn" type="button">New report</button></div></div>
+      <div class="summary"><div class="metric"><b id="totalCount">0</b><span>Report lines</span></div><div class="metric"><b id="checkedCount">0</b><span>Checked</span></div><div class="metric"><b id="issueCount">0</b><span>Lines with issues</span></div><div class="metric"><b id="remainingCount">0</b><span>Remaining</span></div></div>
+      <div class="progress-label"><span id="progressText">0 of 0 complete</span><span id="percentText">0%</span></div><div class="progress-wrap"><div id="progressBar" class="progress"></div></div>
+      <div id="pendingBanner" class="banner warn hidden"></div>
+    </section>
+    <section id="checkPanel" class="panel hidden">
+      <div class="workhead"><span class="counter" id="lineCounter">Line 1</span><span id="lineStatus" class="counter"></span></div>
+      <div id="reportStatusBadge" class="banner warn hidden"></div>
+      <div class="item-code" id="itemCode">—</div><div class="item-name" id="itemName">—</div>
+      <div class="facts">
+        <div class="fact"><span>Location</span><b id="itemLocation">—</b></div>
+        <div class="fact"><span>Lot / Serial</span><b class="lot" id="itemLot">—</b></div>
+        <div class="fact"><span>Expiry</span><b id="itemExpiry">—</b></div>
+        <div class="fact"><span>Report quantity</span><b id="itemQty">—</b></div>
+      </div>
+      <div class="checktitle">Check each report field against the item and slip</div>
+      <div id="checks"></div>
+      <label class="fieldlabel">Checked by</label><div class="field" id="checkerDisplay" aria-live="polite">—</div>
+      <div class="nav"><button class="secondary" id="prevBtn" type="button">← Previous</button><div class="actions"><button class="secondary" id="nextBtn" type="button">Next line →</button><button class="primary" id="nextPendingBtn" type="button">Next unchecked →</button></div></div>
+    </section>
+    <section id="finishPanel" class="panel hidden">
+      <h2 style="margin:0 0 6px">Check summary</h2><p class="small" id="finishMessage"></p>
+      <label class="fieldlabel" for="auditNotes">Overall notes (optional)</label><textarea class="field" id="auditNotes" rows="3" placeholder="Add handover notes or follow-up context"></textarea>
+      <div class="actions" style="margin-top:12px"><button class="export" id="exportBtn" type="button">Download double-check report</button><button class="secondary" id="reviewIssuesBtn" type="button">Review issues</button></div>
+      <p class="small">Your progress is saved on this device, including if the browser closes. Export creates a separate audit workbook; it does not change the original picker report.</p>
+    </section>
+  </main>
+  </div>
+
   <script>
+    function switchAppView(view) {
+      const showPicker = view !== 'doublecheck';
+      document.getElementById('pickerAppView').classList.toggle('hidden', !showPicker);
+      document.getElementById('doubleCheckApp').classList.toggle('hidden', showPicker);
+      document.getElementById('pickerTabButton').classList.toggle('active', showPicker);
+      document.getElementById('doubleCheckTabButton').classList.toggle('active', !showPicker);
+      document.getElementById('pickerTabButton').toggleAttribute('aria-current', showPicker);
+      document.getElementById('doubleCheckTabButton').toggleAttribute('aria-current', !showPicker);
+      window.scrollTo(0, 0);
+    }
+
     let locationMap = {};
     // Keep the imported master rows and columns for full-column location exports.
     let locationMasterRows = [];
@@ -609,6 +714,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let packagingDb = {};
     let currentIndex = 0;
     let sessionId = '';
+    let pickedByIdentity = null;
+    let identitySignaturePointer = null;
     let sessionSaveTimer = null;
     let voiceRecognition = null;
     let voiceModeActive = false;
@@ -616,6 +723,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let voiceSpeaking = false;
     let voiceRestartTimer = null;
     let pendingVoiceAction = null;
+    const HMC_VOICE_PHRASES_KEY = 'hmc_voice_phrases_v1';
+    const VOICE_PHRASE_DEFS = [
+      { key: 'readLot', label: 'Read lot', defaults: ['read lot', 'repeat lot', 'say lot'] },
+      { key: 'readPackage', label: 'Read package', defaults: ['read package', 'read packaging', 'repeat package'] },
+      { key: 'readItem', label: 'Read item', defaults: ['read item', 'read item details', 'repeat item'] },
+      { key: 'setPack', label: 'Set pack size', defaults: ['pack size {number}', 'set pack size to {number}', 'units per pack {number}'], number: true },
+      { key: 'setCarton', label: 'Set carton size', defaults: ['carton size {number}', 'set carton size to {number}', 'packs per carton {number}'], number: true },
+      { key: 'setCatch', label: 'Set catch size', defaults: ['catch size {number}', 'set catch size to {number}', 'packs per catch {number}'], number: true },
+      { key: 'setStrip', label: 'Set strip size', defaults: ['strip size {number}', 'set strip size to {number}', 'units per strip {number}'], number: true },
+      { key: 'savePackage', label: 'Save package', defaults: ['save package', 'save packaging', 'confirm package'] },
+      { key: 'confirmLot', label: 'Confirm lot and expiry', defaults: ['confirm lot and expiry', 'confirm lot and exp', 'confirm lot'] },
+      { key: 'confirmPicked', label: 'Confirm item picked', defaults: ['confirm item picked', 'confirm picked', 'finish picking'] },
+      { key: 'nextPending', label: 'Next pending item', defaults: ['next pending', 'next item', 'go to next pending'] },
+      { key: 'yes', label: 'Confirm response', defaults: ['yes', 'yeah', 'affirmative'] },
+      { key: 'no', label: 'Cancel response', defaults: ['no', 'nope', 'negative'] }
+    ];
+    const voicePhrases = Object.fromEntries(VOICE_PHRASE_DEFS.map(def => [def.key, def.defaults[0]]));
     const HMC_SESSION_DB = 'hmc-picking-sessions-v1';
     const HMC_SESSION_STORE = 'sessions';
 
@@ -664,7 +788,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         savedAt: new Date().toISOString(),
         pickList, packagingDb, currentIndex, locationMap, moveOrderNum, customerName,
         pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
-        rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges
+        rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges,
+        pickedByIdentity
       };
     }
 
@@ -768,6 +893,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       rawHeaderMatrix = saved.rawHeaderMatrix || [];
       rawFooterRows = saved.rawFooterRows || [];
       irFooterRow = saved.irFooterRow || [];
+      pickedByIdentity = saved.pickedByIdentity || null;
       originalColWidths = saved.originalColWidths || [];
       originalMerges = saved.originalMerges || [];
       saveSessionState();
@@ -861,6 +987,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     // Load Session State on Startup
     window.addEventListener('DOMContentLoaded', () => {
+      buildVoicePhraseControls();
+      setupIdentitySignatureCanvas('pickedSignatureCanvas');
       const storedAppVersion = sessionStorage.getItem('hmc_app_version');
       if (storedAppVersion !== HMC_APP_VERSION) {
         // Remove only this application's saved state. Do not clear unrelated
@@ -911,6 +1039,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_originalColWidths', JSON.stringify(originalColWidths));
       sessionStorage.setItem('hmc_originalMerges', JSON.stringify(originalMerges));
       sessionStorage.setItem('hmc_sessionId', sessionId);
+      sessionStorage.setItem('hmc_pickedByIdentity', JSON.stringify(pickedByIdentity));
       schedulePersistentSessionSave();
     }
 
@@ -929,6 +1058,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedWidths = sessionStorage.getItem('hmc_originalColWidths');
       const savedMerges = sessionStorage.getItem('hmc_originalMerges');
       const savedSessionId = sessionStorage.getItem('hmc_sessionId');
+      const savedPickedByIdentity = sessionStorage.getItem('hmc_pickedByIdentity');
 
       if (savedList) pickList = JSON.parse(savedList);
       if (savedPkg) packagingDb = JSON.parse(savedPkg);
@@ -939,6 +1069,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       else confirmedPickCount = pickList.filter(item => item.itemPicked).length;
       if (savedPlacementUpdateRequired !== null) placementUpdateRequired = savedPlacementUpdateRequired === 'true';
       if (savedSessionId) sessionId = savedSessionId;
+      if (savedPickedByIdentity) pickedByIdentity = JSON.parse(savedPickedByIdentity);
       if (savedMo) moveOrderNum = savedMo;
       if (savedCust) customerName = savedCust;
       if (savedHeader) rawHeaderMatrix = JSON.parse(savedHeader);
@@ -1039,6 +1170,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const key = sessionStorage.key(index);
           if (key && key.startsWith('hmc_')) sessionStorage.removeItem(key);
         }
+        localStorage.removeItem(HMC_VOICE_PHRASES_KEY);
         location.reload();
       } catch (error) {
         alert(`Could not clear all picker data: ${error.message || error}`);
@@ -1994,6 +2126,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         confirmedPickCount = 0;
         pickedPlacementLocation = '';
         placementUpdateRequired = false;
+        pickedByIdentity = null;
         rawFooterRows = [];
         irFooterRow = [];
 
@@ -2125,16 +2258,60 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         sortPickList(primaryField, primaryOrder, secondaryField, secondaryOrder);
 
         currentIndex = 0;
-        saveSessionState();
-
-        document.getElementById('uploadCard').classList.add('hidden');
-        document.getElementById('viewToggleCard').classList.remove('hidden');
-        document.getElementById('pickerCard').classList.remove('hidden');
-        document.getElementById('navGroup').classList.remove('hidden');
-        renderCurrentItem();
-        renderSummaryTable();
+        document.getElementById('pickedByMethod').value = 'name';
+        document.getElementById('pickedByValue').value = '';
+        clearIdentitySignature('pickedSignatureCanvas');
+        updatePickedByMethod();
+        document.getElementById('pickedBySetup').style.display = 'flex';
+        document.getElementById('pickedByValue').focus();
       };
       reader.readAsArrayBuffer(file);
+    }
+
+    function updatePickedByMethod() {
+      const method = document.getElementById('pickedByMethod').value;
+      const label = document.getElementById('pickedByValueLabel');
+      const value = document.getElementById('pickedByValue');
+      const signatureWrap = document.getElementById('pickedSignatureWrap');
+      label.textContent = method === 'initials' ? 'Picker initials' : method === 'signature' ? 'Name or initials shown with signature' : 'Picker name';
+      value.placeholder = method === 'initials' ? 'Enter initials' : method === 'signature' ? 'Enter name or initials' : 'Enter picker name';
+      signatureWrap.classList.toggle('hidden', method !== 'signature');
+    }
+
+    function setupIdentitySignatureCanvas(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
+      canvas.addEventListener('pointerdown', event => { event.preventDefault(); identitySignaturePointer = { canvasId, x: event.offsetX * canvas.width / canvas.clientWidth, y: event.offsetY * canvas.height / canvas.clientHeight }; canvas.setPointerCapture(event.pointerId); });
+      canvas.addEventListener('pointermove', event => { if (!identitySignaturePointer || identitySignaturePointer.canvasId !== canvasId) return; const x=event.offsetX*canvas.width/canvas.clientWidth, y=event.offsetY*canvas.height/canvas.clientHeight; ctx.beginPath();ctx.moveTo(identitySignaturePointer.x,identitySignaturePointer.y);ctx.lineTo(x,y);ctx.stroke();identitySignaturePointer={canvasId,x,y}; });
+      const stop = () => { if(identitySignaturePointer?.canvasId===canvasId) identitySignaturePointer=null; };
+      canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);canvas.addEventListener('lostpointercapture',stop);
+    }
+
+    function clearIdentitySignature(canvasId) {
+      const canvas = document.getElementById(canvasId); if (!canvas) return;
+      canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+    }
+
+    function completePickedBySetup(event) {
+      event.preventDefault();
+      const method=document.getElementById('pickedByMethod').value;
+      const display=document.getElementById('pickedByValue').value.trim();
+      const canvas=document.getElementById('pickedSignatureCanvas');
+      const signatureData=method==='signature'?canvas.toDataURL('image/png'):'';
+      const signatureHasInk=method==='signature' && canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((channel,index)=>index%4===3&&channel>0);
+      if(!display){document.getElementById('pickedByValue').focus();return;}
+      if(method==='signature'&&!signatureHasInk){alert('Please draw your signature in the box, or choose Name or Initials.');return;}
+      pickedByIdentity={method,display,signatureData};
+      document.getElementById('pickedBySetup').style.display='none';
+      saveSessionState();
+      document.getElementById('uploadCard').classList.add('hidden');
+      document.getElementById('viewToggleCard').classList.remove('hidden');
+      document.getElementById('pickerCard').classList.remove('hidden');
+      document.getElementById('navGroup').classList.remove('hidden');
+      renderCurrentItem();
+      renderSummaryTable();
     }
 
     function toggleLotCheck() {
@@ -2415,7 +2592,83 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function askVoiceConfirmation(prompt, action) {
       pendingVoiceAction = action;
       setVoiceStatus('Please confirm the requested action.');
-      speakVoiceResponse(`${prompt} Say yes to confirm or no to cancel.`);
+      speakVoiceResponse(`${prompt}. Say ${voicePhrases.yes} to confirm or ${voicePhrases.no} to cancel.`);
+    }
+
+    function normalizeVoicePhrase(value) {
+      return String(value || '').toLowerCase().replace(/[.,!?]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function buildVoicePhraseControls() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(HMC_VOICE_PHRASES_KEY) || '{}');
+        VOICE_PHRASE_DEFS.forEach(def => {
+          if (typeof saved[def.key] === 'string' && saved[def.key].trim()) voicePhrases[def.key] = saved[def.key].trim();
+        });
+      } catch (error) { console.warn('Could not load saved voice phrases:', error); }
+      const container = document.getElementById('voicePhraseSettings');
+      if (!container) return;
+      container.replaceChildren();
+      VOICE_PHRASE_DEFS.forEach(def => {
+        const row = document.createElement('div'); row.className = 'voice-phrase-row';
+        const label = document.createElement('label'); label.textContent = def.label;
+        const controls = document.createElement('div');
+        const select = document.createElement('select'); select.dataset.voicePhrase = def.key;
+        const custom = document.createElement('input'); custom.type = 'text'; custom.dataset.voiceCustom = def.key;
+        custom.placeholder = def.number ? 'Include {number}' : 'Type a phrase'; custom.maxLength = 80;
+        const isPreset = def.defaults.includes(voicePhrases[def.key]);
+        def.defaults.forEach(value => { const option = document.createElement('option'); option.value = value; option.textContent = value; select.append(option); });
+        const customOption = document.createElement('option'); customOption.value = '__custom__'; customOption.textContent = 'Custom phrase…'; select.append(customOption);
+        select.value = isPreset ? voicePhrases[def.key] : '__custom__'; custom.value = isPreset ? '' : voicePhrases[def.key]; custom.hidden = select.value !== '__custom__';
+        select.addEventListener('change', () => { custom.hidden = select.value !== '__custom__'; });
+        controls.append(select, custom); row.append(label, controls); container.append(row);
+      });
+      updateVoiceCommandPreview();
+    }
+
+    function saveVoicePhraseSettings() {
+      const next = {};
+      for (const def of VOICE_PHRASE_DEFS) {
+        const select = document.querySelector(`[data-voice-phrase="${def.key}"]`);
+        const custom = document.querySelector(`[data-voice-custom="${def.key}"]`);
+        const value = normalizeVoicePhrase(select.value === '__custom__' ? custom.value : select.value);
+        if (!value) { document.getElementById('voicePhraseSaveStatus').textContent = `Enter a phrase for ${def.label}.`; return; }
+        if (def.number && (value.split('{number}').length !== 2 || !value.includes('{number}'))) { document.getElementById('voicePhraseSaveStatus').textContent = `${def.label} must contain {number} exactly once.`; return; }
+        next[def.key] = value;
+      }
+      const commandValues = VOICE_PHRASE_DEFS.map(def => normalizeVoicePhrase(next[def.key]));
+      if (new Set(commandValues).size !== commandValues.length) { document.getElementById('voicePhraseSaveStatus').textContent = 'Each command needs a different phrase.'; return; }
+      try {
+        localStorage.setItem(HMC_VOICE_PHRASES_KEY, JSON.stringify(next));
+        Object.assign(voicePhrases, next);
+        document.getElementById('voicePhraseSaveStatus').textContent = 'Phrases saved on this device.';
+        updateVoiceCommandPreview();
+      } catch (error) { document.getElementById('voicePhraseSaveStatus').textContent = `Could not save phrases: ${error.message || error}`; }
+    }
+
+    function updateVoiceCommandPreview() {
+      const list = document.getElementById('voiceCommandPreview');
+      if (!list) return;
+      list.replaceChildren();
+      VOICE_PHRASE_DEFS.forEach(def => {
+        const li = document.createElement('li');
+        li.textContent = def.number ? `${voicePhrases[def.key].replace('{number}', '10')} — ${def.label}` : `${voicePhrases[def.key]} — ${def.label}`;
+        list.append(li);
+      });
+    }
+
+    function voicePhraseMatches(key, phrase) { return normalizeVoicePhrase(voicePhrases[key]) === normalizeVoicePhrase(phrase); }
+
+    function numberFromVoiceTemplate(key, phrase) {
+      const template = normalizeVoicePhrase(voicePhrases[key]);
+      const marker = '{number}';
+      const markerAt = template.indexOf(marker);
+      if (markerAt < 0) return { matched: false, number: null };
+      const prefix = template.slice(0, markerAt).trim();
+      const suffix = template.slice(markerAt + marker.length).trim();
+      if (!phrase.startsWith(prefix) || !phrase.endsWith(suffix) || phrase.length < prefix.length + suffix.length) return { matched: false, number: null };
+      const numberText = phrase.slice(prefix.length, suffix ? phrase.length - suffix.length : undefined).trim();
+      return { matched: true, number: parseSpokenNumber(numberText) };
     }
 
     function parseSpokenNumber(value) {
@@ -2450,47 +2703,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (!phrase) return;
 
       if (pendingVoiceAction) {
-        if (/^(yes|yeah|yep|confirm|correct|do it)$/.test(phrase)) {
+        if (voicePhraseMatches('yes', phrase)) {
           const action = pendingVoiceAction;
           pendingVoiceAction = null;
           setVoiceStatus('Confirmed.');
           speakVoiceResponse('Confirmed.', action);
-        } else if (/^(no|nope|cancel|stop)$/.test(phrase)) {
+        } else if (voicePhraseMatches('no', phrase)) {
           pendingVoiceAction = null;
           speakVoiceResponse('Cancelled.');
           setVoiceStatus('Cancelled. Listening for picker commands…');
         } else {
-          speakVoiceResponse('Please say yes to confirm or no to cancel.');
+          speakVoiceResponse(`Please say ${voicePhrases.yes} to confirm or ${voicePhrases.no} to cancel.`);
         }
         return;
       }
 
-      if (/^(read|repeat|say) (the )?lot( number)?$/.test(phrase) || phrase === 'lot number') {
+      if (voicePhraseMatches('readLot', phrase)) {
         speakLotSerial(pickList[currentIndex]?.lot);
         return;
       }
-      if (/^(read|repeat) (the )?(package|packaging|package details)$/.test(phrase)) {
+      if (voicePhraseMatches('readPackage', phrase)) {
         speakVoiceResponse(describeCurrentPackaging());
         return;
       }
-      if (/^(read|repeat) (the )?(item|item details)$/.test(phrase)) {
+      if (voicePhraseMatches('readItem', phrase)) {
         const item = pickList[currentIndex];
         speakVoiceResponse(`Item ${item.code}. ${item.name}. Location ${item.location || 'not set'}. Lot number ${item.lot}. Expiry ${item.expiry}.`);
         return;
       }
 
       const packageFields = [
-        { aliases: ['pack size', 'units per pack'], id: 'packSize', label: 'pack size' },
-        { aliases: ['carton size', 'packs per carton'], id: 'cartonSizeInPacks', label: 'carton size' },
-        { aliases: ['catch size', 'packs per catch'], id: 'catchSizeInPacks', label: 'catch size' },
-        { aliases: ['strip size', 'units per strip'], id: 'stripSize', label: 'strip size' }
+        { key: 'setPack', id: 'packSize', label: 'pack size' },
+        { key: 'setCarton', id: 'cartonSizeInPacks', label: 'carton size' },
+        { key: 'setCatch', id: 'catchSizeInPacks', label: 'catch size' },
+        { key: 'setStrip', id: 'stripSize', label: 'strip size' }
       ];
       for (const field of packageFields) {
-        const alias = field.aliases.find(value => phrase.includes(value));
-        if (!alias) continue;
-        const number = parseSpokenNumber(phrase.slice(phrase.indexOf(alias) + alias.length));
+        const parsed = numberFromVoiceTemplate(field.key, phrase);
+        if (!parsed.matched) continue;
+        const number = parsed.number;
         if (number === null || number < 0) {
-          speakVoiceResponse(`I did not catch a valid number for ${field.label}. Say ${field.label} followed by the number.`);
+            speakVoiceResponse(`I did not catch a valid number for ${field.label}. Try ${voicePhrases[field.key].replace('{number}', '10')}.`);
           return;
         }
         const item = pickList[currentIndex];
@@ -2508,7 +2761,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      if (/^(save|confirm|save the|confirm the)? ?(package|packaging)( details| data)?$/.test(phrase)) {
+      if (voicePhraseMatches('savePackage', phrase)) {
         if (!pickList[currentIndex]?.lotConfirmed) {
           speakVoiceResponse('Confirm the lot and expiry first. Then I can save the package information.');
           return;
@@ -2525,7 +2778,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      if (/^(confirm )?(lot|lot and expiry|lot and expiration|lot expiry)$/.test(phrase) || phrase === 'confirm lot and exp') {
+      if (voicePhraseMatches('confirmLot', phrase)) {
         const item = pickList[currentIndex];
         if (item.lotConfirmed) {
           speakVoiceResponse('The lot and expiry are already confirmed.');
@@ -2535,7 +2788,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      if (/^(confirm )?(item )?picked$/.test(phrase) || /^(confirm|finish) picking$/.test(phrase)) {
+      if (voicePhraseMatches('confirmPicked', phrase)) {
         const item = pickList[currentIndex];
         if (!item.lotConfirmed) {
           speakVoiceResponse('Confirm the lot and expiry first.');
@@ -2545,11 +2798,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return;
       }
 
-      if (/^next pending$/.test(phrase)) {
+      if (voicePhraseMatches('nextPending', phrase)) {
         askVoiceConfirmation('Move to the next pending item', () => navigateNextPending());
         return;
       }
-      speakVoiceResponse(`I did not recognize “${phrase}”. Try read package, pack size followed by a number, confirm lot and expiry, or next pending.`);
+      speakVoiceResponse(`I did not recognize “${phrase}”. Available examples: ${voicePhrases.readPackage}, ${voicePhrases.setPack.replace('{number}', '10')}, ${voicePhrases.confirmLot}, or ${voicePhrases.nextPending}.`);
     }
 
     function confirmFullPicked() {
@@ -2833,8 +3086,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         { horizontal: "center", vertical: "middle" },                   // F: Expiry Date
         { horizontal: "center", vertical: "middle" },                   // G: Quantity Requested
         { horizontal: "center", vertical: "middle" },                   // H: Quantity Revised
-        { horizontal: "center", vertical: "middle" },                   // I: Status
-        { horizontal: "center", vertical: "middle", wrapText: true }    // J: Remarks / Comments
+        { horizontal: "center", vertical: "middle", wrapText: true }    // I: Remarks / Comments
       ];
 
       // Top Header Rows Preserved
@@ -2898,8 +3150,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         "Expiry Date",        // Col F
         "Quantity Requested", // Col G
         "Quantity Revised",   // Col H
-        "Status",             // Col I
-        "Remarks / Comments"  // Col J
+        "Remarks / Comments"  // Col I
       ]);
 
       headerRow.height = 26;
@@ -2930,8 +3181,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const nearExp = isNearExpiry(item.expiry);
         const isGeneric = isGenericItem(item);
 
-        const statusText = isPending ? "PENDING" : (isAdjusted ? "ADJUSTED" : "PICKED");
-
         let remarks = item.comment || "";
         if (item.pickedPlacement) {
           remarks = remarks ? `${remarks} | Placement: ${item.pickedPlacement}` : `Placement: ${item.pickedPlacement}`;
@@ -2955,7 +3204,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           item.expiry,
           qtyRequestedVal,
           qtyRevisedVal,
-          statusText,
           remarks
         ]);
 
@@ -3134,17 +3382,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       // Apply Explicit Column Widths requested by user
-      const specifiedWidths = [11, 37, 5, 16, 16, 11, 19, 16, 13, 20];
-      for (let c = 1; c <= 10; c++) {
+      const specifiedWidths = [11, 37, 5, 16, 16, 11, 19, 16, 28];
+      for (let c = 1; c <= 9; c++) {
         worksheet.getColumn(c).width = specifiedWidths[c - 1];
       }
 
-      // Ensure explicit gridlines and apply complete thin borders to ALL cells across all rows (Columns 1 to 10)
+      // Ensure explicit gridlines and apply complete thin borders to ALL cells across all rows (Columns 1 to 9)
       worksheet.views = [{ showGridLines: true }];
 
       for (let r = 1; r <= worksheet.rowCount; r++) {
         const row = worksheet.getRow(r);
-        for (let c = 1; c <= 10; c++) {
+        for (let c = 1; c <= 9; c++) {
           const cell = row.getCell(c);
           if (c === 2) {
             cell.alignment = Object.assign({}, cell.alignment || {}, { wrapText: true });
@@ -3211,13 +3459,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       const reportHasFooter = Array.isArray(irFooterRow) && irFooterRow.length > 0;
       if (irFooterRow && irFooterRow.length > 0) {
-        const footerParts = irFooterRow
-          .map(c => String(c ?? '').replace(/\s+/g, ' ').trim())
-          .filter(Boolean);
-
-        // Discard the first cell. Original IR row has four cells; cells 2-4
-        // become the Excel left / center / right footer zones.
-        const footerThreeParts = footerParts.slice(1, 4);
+        const footerThreeParts = irFooterRow.slice(1, 4).map(c => String(c ?? '').replace(/\s+/g, ' ').trim());
+        if (pickedByIdentity?.display) footerThreeParts[1] = `Picked By: ${pickedByIdentity.display}`;
         const leftText = footerThreeParts[0] || '';
         const middleText = footerThreeParts[1] || '';
         const rightText = footerThreeParts[2] || '';
@@ -3237,6 +3480,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         worksheet.__hmcFooterCode = footerCode;
       }
 
+      if (pickedByIdentity?.method === 'signature' && pickedByIdentity.signatureData) {
+        const signatureRow = worksheet.addRow(['', 'Picked By:', '', pickedByIdentity.display]);
+        signatureRow.height = 42;
+        signatureRow.getCell(2).font = { name: 'Calibri', size: 10, bold: true };
+        signatureRow.getCell(4).font = { name: 'Calibri', size: 10, bold: true };
+        const signatureImageId = workbook.addImage({ base64: pickedByIdentity.signatureData, extension: 'png' });
+        worksheet.addImage(signatureImageId, { tl: { col: 2, row: signatureRow.number - 1 }, ext: { width: 150, height: 38 } });
+      }
+
       // Generate & Download Excel File
       const timestamp = getFormattedTimestamp();
       const safeMo = moveOrderNum.replace(/[/\\?%*:|"<>]/g, '-');
@@ -3252,10 +3504,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (typeof JSZip === 'undefined') {
           throw new Error('Embedded JSZip failed to load; XLSX footer cannot be safely generated.');
         }
-        const footerParts = irFooterRow
-          .map(c => String(c ?? '').replace(/\s+/g, ' ').trim())
-          .filter(Boolean);
-        const footerThreeParts = footerParts.slice(1, 4);
+        const footerThreeParts = irFooterRow.slice(1, 4).map(c => String(c ?? '').replace(/\s+/g, ' ').trim());
+        if (pickedByIdentity?.display) footerThreeParts[1] = `Picked By: ${pickedByIdentity.display}`;
         const footerGap = '                                                            '; // 60 spaces between the three left-aligned footer fields.
         const footerCode = `&L${footerThreeParts[0] || ''}${footerGap}${footerThreeParts[1] || ''}${footerGap}${footerThreeParts[2] || ''}`;
         const escapeXml = value => String(value)
@@ -3401,5 +3651,96 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       XLSX.writeFile(workbook, `HMC_Packaging_Database_${timestamp}.xlsx`);
     }
   </script>
+
+<script>
+(() => {
+    'use strict';
+    const STORE_KEY = 'hmc_double_check_session_v2';
+    const FIELDS = [
+      {key:'code', label:'Item code'}, {key:'location', label:'Location'},
+      {key:'lot', label:'Lot / serial'}, {key:'expiry', label:'Expiry'}, {key:'qty', label:'Quantity'}, {key:'status', label:'Report status'}
+    ];
+    let session = null, current = 0, drawing = null;
+    const $ = id => document.getElementById(id);
+    const text = value => value == null || String(value).trim() === '' ? '—' : String(value).trim();
+    const cleanQty = value => String(value ?? '').replace(/[✓✔]/g,'').replace(/,/g,'').trim();
+
+    $('reportFile').addEventListener('change', event => { const file = event.target.files[0]; if (file) loadReport(file); });
+    const drop = $('dropZone');
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+    drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); const file=e.dataTransfer.files[0]; if(file) loadReport(file); });
+    $('prevBtn').onclick = () => showLine(Math.max(0,current-1));
+    $('nextBtn').onclick = () => showLine(Math.min(session.rows.length-1,current+1));
+    $('nextPendingBtn').onclick = goNextIncomplete;
+    $('newReportBtn').onclick = newReport;
+    $('speakBtn').onclick = speakCurrent;
+    $('auditNotes').addEventListener('input', saveSession);
+    $('checkerIdentityMethod').addEventListener('change', updateCheckerIdentityMethod);
+    $('checkerIdentityForm').addEventListener('submit', completeCheckerIdentitySetup);
+    $('clearCheckerSignature').addEventListener('click', clearCheckerSignature);
+    setupSignatureCanvas();
+    $('exportBtn').onclick = exportAudit;
+    $('reviewIssuesBtn').onclick = () => { const idx=session.rows.findIndex(row=>FIELDS.some(f=>row.checks[f.key]?.state==='issue')); if(idx>=0) showLine(idx); };
+
+    function updateCheckerIdentityMethod(){const method=$('checkerIdentityMethod').value;const label=$('checkerIdentityValueLabel');const field=$('checkerIdentityValue');label.textContent=method==='initials'?'Checker initials':method==='signature'?'Name or initials shown with signature':'Checker name';field.placeholder=method==='initials'?'Enter initials':method==='signature'?'Enter name or initials':'Enter checker name';$('checkerSignatureWrap').classList.toggle('hidden',method!=='signature');}
+    function setupSignatureCanvas(){const canvas=$('checkerSignatureCanvas');const ctx=canvas.getContext('2d');ctx.lineWidth=5;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#111827';canvas.addEventListener('pointerdown',event=>{event.preventDefault();drawing={x:event.offsetX*canvas.width/canvas.clientWidth,y:event.offsetY*canvas.height/canvas.clientHeight};canvas.setPointerCapture(event.pointerId);});canvas.addEventListener('pointermove',event=>{if(!drawing)return;const x=event.offsetX*canvas.width/canvas.clientWidth,y=event.offsetY*canvas.height/canvas.clientHeight;ctx.beginPath();ctx.moveTo(drawing.x,drawing.y);ctx.lineTo(x,y);ctx.stroke();drawing={x,y};});const stop=()=>drawing=null;canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);canvas.addEventListener('lostpointercapture',stop);}
+    function clearCheckerSignature(){const canvas=$('checkerSignatureCanvas');canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);}
+    function completeCheckerIdentitySetup(event){event.preventDefault();const method=$('checkerIdentityMethod').value,display=$('checkerIdentityValue').value.trim(),canvas=$('checkerSignatureCanvas');if(!display){$('checkerIdentityValue').focus();return;}const hasInk=method==='signature'&&canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some((value,index)=>index%4===3&&value>0);if(method==='signature'&&!hasInk){alert('Please draw your signature in the box, or choose Name or Initials.');return;}session.checkerIdentity={method,display,signatureData:method==='signature'?canvas.toDataURL('image/png'):''};session.checker=display;saveSession();openSession();}
+
+    function normalizeHeader(value){return String(value??'').toLowerCase().replace(/[^a-z0-9]/g,'');}
+    function findHeader(headers, aliases){return headers.findIndex(h=>aliases.includes(normalizeHeader(h)));}
+    async function loadReport(file){
+      $('importStatus').textContent='Reading report…';
+      if(typeof XLSX==='undefined'){ $('importStatus').textContent='The spreadsheet reader did not load. Connect to the internet, reload this page, then try again.'; return; }
+      try{
+        const bytes=await file.arrayBuffer();
+        const book=XLSX.read(bytes,{type:'array',cellDates:true});
+        const sheet=book.Sheets[book.SheetNames[0]];
+        const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false});
+        const headerAt=matrix.findIndex(row=>{
+          const hs=row.map(normalizeHeader);
+          return (hs.includes('itemcode')||hs.includes('itemnumber')||hs.includes('item')) && (hs.includes('lotserial')||hs.includes('lot')||hs.includes('serial')) && (hs.includes('quantityrequested')||hs.includes('quantity')||hs.includes('qtyrequested'));
+        });
+        if(headerAt<0) throw new Error('Could not find the pick report columns (Item Code, Lot/Serial, and Quantity). Select the generated confirmation workbook.');
+        const headers=matrix[headerAt];
+        const codeCol=findHeader(headers,['itemcode','itemnumber','item']);
+        const nameCol=findHeader(headers,['itemdescription','description','itemname']);
+        const locCol=findHeader(headers,['location','storelocation','binlocation']);
+        const lotCol=findHeader(headers,['lotserial','lot','serial']);
+        const expCol=findHeader(headers,['expirydate','expiry','expirationdate','expdate']);
+        const reqCol=findHeader(headers,['quantityrequested','quantity','qtyrequested','requestedqty']);
+        const revisedCol=findHeader(headers,['quantityrevised','revisedquantity','qtyrevised','revisedqty']);
+        const statusCol=findHeader(headers,['status']);
+        const remarksCol=findHeader(headers,['remarkscomments','remarks','comments']);
+        const rows=[];
+        for(let i=headerAt+1;i<matrix.length;i++){
+          const raw=matrix[i]; if(!String(raw[codeCol]??'').trim()) continue;
+          const status=statusCol>=0?String(raw[statusCol]??'').trim().toUpperCase():'';
+          const req=cleanQty(raw[reqCol]); const revised=revisedCol>=0?cleanQty(raw[revisedCol]):'';
+          const qty=revised?revised:req;
+          const code=String(raw[codeCol]).trim();
+          const pending=status==='PENDING';
+          rows.push({code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,checks:{}});
+        }
+        if(!rows.length) throw new Error('No item rows were found in this report.');
+        session={fileName:file.name,importedAt:new Date().toISOString(),rows,checker:'',checkerIdentity:null,notes:''};
+        current=0; $('checkerIdentityMethod').value='name';$('checkerIdentityValue').value='';clearCheckerSignature();updateCheckerIdentityMethod();$('checkerIdentitySetup').style.display='flex';$('checkerIdentityValue').focus();
+      }catch(error){ $('importStatus').textContent=error.message||String(error); }
+    }
+    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
+    function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
+    function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';updateSummary();showLine(current); }
+    function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const issues=session.rows.filter(row=>FIELDS.some(f=>row.checks[f.key]?.state==='issue')).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=issues;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=issues?`${issues} line${issues===1?' has':'s have'} reported issues. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
+    function isComplete(row){return FIELDS.every(field=>['match','issue'].includes(row.checks[field.key]?.state)&&(!row.checks[field.key]||row.checks[field.key].state!=='issue'||String(row.checks[field.key].note||'').trim()))&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
+    function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('prevBtn').disabled=current===0;$('nextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?(FIELDS.some(f=>row.checks[f.key]?.state==='issue')?'ISSUE RECORDED':'CHECKED'):'NOT COMPLETE';renderChecks(row);updateSummary();}
+    function renderChecks(row){const holder=$('checks');holder.replaceChildren();FIELDS.forEach(field=>{const currentCheck=row.checks[field.key]||{};const line=document.createElement('div');line.className='checkrow';const label=document.createElement('div');label.className='checkname';label.textContent=field.label;const state=document.createElement('div');state.className='checkstate';state.textContent=currentCheck.state==='match'?'Match recorded':currentCheck.state==='issue'?'Issue recorded':'Choose result';const choice=document.createElement('div');choice.className='choice';[['match','Match'],['issue','Issue']].forEach(([value,caption])=>{const button=document.createElement('button');button.type='button';button.className=`${value==='match'?'match':'issue'}${currentCheck.state===value?' selected':''}`;button.textContent=caption;button.setAttribute('aria-pressed',String(currentCheck.state===value));button.onclick=()=>{row.checks[field.key]={state:value,note:currentCheck.note||''};renderChecks(row);saveSession();showLine(current);};choice.append(button);});line.append(label,state,choice);if(currentCheck.state==='issue'){const note=document.createElement('input');note.className='note';note.maxLength=180;note.placeholder=`What is wrong with ${field.label.toLowerCase()}? Required`;note.value=currentCheck.note||'';note.setAttribute('aria-label',`${field.label} discrepancy`);note.oninput=()=>{row.checks[field.key].note=note.value;saveSession();};line.append(note);}holder.append(line);});}
+    function goNextIncomplete(){saveSession();for(let offset=1;offset<=session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});}
+    function speakCurrent(){if(!session)return;if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const row=session.rows[current];const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location ${row.location||'not set'}. Lot number ${row.lot||'not set'}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.9;speechSynthesis.speak(utterance);}
+    function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
+    async function exportAudit(){if(!session)return;if(typeof ExcelJS==='undefined'){alert('The Excel report component did not load. Connect to the internet and reload this app to export.');return;}const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Double Check Audit');const method=session.checkerIdentity?.method||'name',identity=session.checkerIdentity?.display||session.checker||'';ws.addRow(['HMC Double Check Audit']);ws.mergeCells('A1:O1');ws.getRow(1).font={bold:true,size:16,color:{argb:'FF172554'}};ws.addRow(['Source report',session.fileName]);ws.addRow(['Imported',new Date(session.importedAt).toLocaleString()]);ws.addRow(['Checked By',identity]);ws.addRow(['Identification method',method==='signature'?'Drawn signature':method==='initials'?'Initials':'Name']);ws.addRow(['Exported',new Date().toLocaleString()]);ws.addRow(['Overall notes',session.notes||'']);if(session.checkerIdentity?.signatureData){const imageRow=ws.addRow(['Checker signature']);imageRow.height=44;const imageId=wb.addImage({base64:session.checkerIdentity.signatureData,extension:'png'});ws.addImage(imageId,{tl:{col:1,row:imageRow.number-1},ext:{width:160,height:40}});}ws.addRow([]);const header=ws.addRow(['Item code','Description','Location','Lot / Serial','Expiry','Report quantity','Report status','Report status check','Item code check','Location check','Lot check','Expiry check','Quantity check','Discrepancy notes','Original report row']);header.font={bold:true,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF172554'}};const data=session.rows.map(row=>{const state=k=>row.checks[k]?.state==='match'?'MATCH':row.checks[k]?.state==='issue'?'ISSUE':'NOT CHECKED';const notes=FIELDS.filter(f=>row.checks[f.key]?.state==='issue').map(f=>`${f.label}: ${row.checks[f.key].note}`).join(' | ');return[row.code,row.name,row.location,row.lot,row.expiry,row.qty,row.reportStatus,state('status'),state('code'),state('location'),state('lot'),state('expiry'),state('qty'),notes,row.sourceRow];});data.forEach(values=>ws.addRow(values));ws.columns=[{width:18},{width:40},{width:18},{width:22},{width:16},{width:16},{width:16},{width:16},{width:16},{width:14},{width:14},{width:14},{width:16},{width:55},{width:18}];ws.views=[{state:'frozen',ySplit:header.number}];const buffer=await wb.xlsx.writeBuffer();const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`HMC_Double_Check_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    restoreSession();
+  })();
+</script>
 </body>
 </html>
