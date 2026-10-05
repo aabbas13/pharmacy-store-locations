@@ -3541,7 +3541,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       // Extend the remarks column across I:J for the table header and each pick row, starting at row 6.
-      const lastPickReportRow = tableHeaderRowIndex + pickList.length - 1;
+      const lastPickReportRow = tableHeaderRowIndex + pickList.length;
       for (let r = 6; r <= lastPickReportRow; r++) {
         try {
           worksheet.mergeCells(r, 9, r, 10);
