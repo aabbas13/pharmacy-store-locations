@@ -127,23 +127,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .item-meta > div:first-child { flex: 1; min-width: 0; }
     .lot-value { display: block; color: #1d4ed8; font-size: clamp(1.35rem, 6vw, 2.1rem); line-height: 1.08; font-weight: 850; letter-spacing: 0.06em; overflow-wrap: anywhere; margin-top: 1px; }
     .speak-lot-btn { padding: 3px 7px; margin-top: 2px; font-size: 0.72rem; border-radius: 7px; }
-    .placement-box { display: block; flex: 0 0 78px; margin: 0; padding: 4px; border: 1px solid #bfdbfe; border-radius: 7px; background: #eff6ff; text-align: center; }
-    .placement-box > label { margin: 0 0 2px; font-size: 0.56rem; }
-    .placement-box input { width: 100%; min-width: 0; max-width: none; padding: 4px 3px; font-size: 0.82rem; font-weight: 750; letter-spacing: 0.08em; text-align: center; }
-    .placement-help { color: var(--muted); font-size: 0.65rem; text-align: left; }
-    .placement-help summary { width: fit-content; margin: 2px auto 0; color: #1d4ed8; cursor: pointer; font-weight: 650; }
-    .placement-help p { margin: 4px 0 0; }
     .picker-main-actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 6px; margin: 5px 0 9px; }
-    .confirm-placement-group { display: flex; align-items: stretch; gap: 5px; min-width: 0; }
-    .confirm-placement-group #confirmItemBtn { flex: 1; min-width: 0; margin: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
+    .picker-main-actions #confirmItemBtn { min-width: 0; margin: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
     .picker-main-actions .next-pending-btn { min-width: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
     .picker-secondary-details { margin: 5px 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: #fff; scroll-margin-top: 10px; }
     .picker-secondary-details > summary { color: var(--muted); cursor: pointer; font-size: 0.82rem; font-weight: 700; }
     .picker-secondary-details[open] > summary { margin-bottom: 9px; }
-    .placement-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; background: rgba(15,23,42,.62); }
-    .placement-modal-card { width: min(100%, 420px); padding: 20px; border-radius: 14px; background: #fff; box-shadow: 0 20px 60px #0004; }
-    .placement-modal-card h2 { margin: 0 0 8px; color: var(--primary); }
-    .placement-modal-card p { color: var(--muted); margin: 0 0 12px; }
+    .pick-confirm-modal { position: fixed; inset: 0; z-index: 3000; display: none; overflow-y: auto; padding: 12px; background: rgba(15,23,42,.72); }
+    .pick-confirm-panel { display: flex; flex-direction: column; gap: 12px; width: min(100%, 720px); min-height: min(720px, calc(100dvh - 24px)); margin: auto; padding: 18px; border-radius: 16px; background: #fff; box-shadow: 0 20px 60px #0005; }
+    .pick-confirm-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .pick-confirm-heading h2 { color:var(--primary); font-size:1.15rem; }
+    .pick-confirm-close { flex:0 0 auto; padding:7px 11px; background:#e2e8f0; color:#172033; }
+    .pick-confirm-code { color:#1d4ed8; font-size:clamp(1.7rem,7vw,2.6rem); font-weight:900; overflow-wrap:anywhere; }
+    .pick-confirm-name { color:#334155; font-size:1rem; font-weight:700; }
+    .pick-confirm-facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .pick-confirm-fact { min-width:0; padding:10px; border:1px solid #dbe3ef; border-radius:10px; background:#f8fafc; }
+    .pick-confirm-fact span { display:block; color:#64748b; font-size:.68rem; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+    .pick-confirm-fact b { display:block; margin-top:3px; color:#172033; font-size:.95rem; overflow-wrap:anywhere; }
+    .pick-confirm-fact.wide { grid-column:1 / -1; }
+    .pick-placement-entry { padding:12px; border:1px solid #bfdbfe; border-radius:12px; background:#eff6ff; }
+    .pick-placement-entry label { margin-bottom:6px; font-size:.8rem; }
+    .pick-placement-entry input { width:100%; min-height:54px; text-align:center; font-size:1.5rem; font-weight:850; letter-spacing:.12em; text-transform:uppercase; }
+    .pick-confirm-actions { position:sticky; bottom:0; display:grid; grid-template-columns:1fr 2fr; gap:8px; margin-top:auto; padding-top:10px; background:#fff; }
+    .pick-confirm-actions button { min-height:48px; }
+    @media (max-width: 600px) {
+      .pick-confirm-modal { padding:0; }
+      .pick-confirm-panel { width:100%; min-height:100dvh; border-radius:0; padding:calc(14px + env(safe-area-inset-top)) 14px calc(14px + env(safe-area-inset-bottom)); }
+      .pick-confirm-facts { gap:6px; }
+      .pick-confirm-fact { padding:8px; }
+    }
 
     .btn-lot { background: var(--warning); color: white; width: 100%; font-size: 0.9rem; padding: 10px; border-radius: 8px; font-weight: bold; border: none; cursor: pointer; }
     .btn-lot.confirmed { background: var(--success); }
@@ -222,6 +234,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 <style>
 .double-check-app{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#172033;background:#f1f5f9;font-synthesis:none;--navy:#172554;--blue:#1d4ed8;--green:#15803d;--red:#b91c1c;--muted:#64748b;--line:#dbe3ef}.double-check-app *{box-sizing:border-box}.double-check-app{margin:0}.double-check-app button,.double-check-app input,.double-check-app textarea{font:inherit}.double-check-app button{border:0;border-radius:10px;padding:12px 16px;font-weight:750;cursor:pointer}.double-check-app button:disabled{opacity:.45;cursor:not-allowed}.double-check-app .top{background:var(--navy);color:#fff;padding:15px max(16px,calc((100vw - 980px)/2));display:flex;align-items:center;justify-content:space-between;gap:12px}.double-check-app .brand{font-weight:850;font-size:1.12rem}.double-check-app .sub{opacity:.8;font-size:.8rem;margin-top:2px}.double-check-app .app-tabs{max-width:980px;margin:10px auto 0;padding:0 14px;display:grid;grid-template-columns:1fr 1fr;gap:4px}.double-check-app .app-tab{display:block;text-align:center;padding:10px 8px;border-radius:10px;background:#e2e8f0;color:#334155;text-decoration:none;font-size:.82rem;font-weight:800}.double-check-app .app-tab.active{background:var(--navy);color:#fff;box-shadow:0 1px 4px #0f172a22}.double-check-app main{max-width:980px;margin:18px auto;padding:0 14px 40px}.double-check-app .panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 3px 12px #0f172a0b}.double-check-app .welcome h1{margin:0 0 7px;font-size:1.35rem}.double-check-app .welcome p{color:#475569;margin:0 0 14px;line-height:1.5}.double-check-app .drop{border:2px dashed #93a9c7;border-radius:13px;padding:20px;text-align:center;background:#f8fafc}.double-check-app .drop.drag{border-color:var(--blue);background:#eff6ff}.double-check-app .drop input{max-width:100%}.double-check-app .small{font-size:.78rem;color:var(--muted)}.double-check-app .hidden{display:none!important}.double-check-app .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.double-check-app .metric{background:#f1f5f9;border-radius:11px;padding:10px}.double-check-app .metric b{display:block;font-size:1.2rem}.double-check-app .metric span{font-size:.72rem;color:var(--muted)}.double-check-app .progress-wrap{height:10px;border-radius:10px;background:#e2e8f0;overflow:hidden}.double-check-app .progress{height:100%;background:#16a34a;width:0;transition:width .2s}.double-check-app .progress-label{display:flex;justify-content:space-between;gap:10px;font-size:.78rem;color:#475569;margin:7px 0}.double-check-app .identity-overlay{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;padding:14px;background:#0f172ab8}.double-check-app .identity-dialog{width:min(100%,480px);max-height:94vh;overflow:auto;background:#fff;border-radius:15px;padding:18px;box-shadow:0 20px 60px #0005}.double-check-app .identity-dialog h2{font-size:1.1rem;margin-bottom:6px}.double-check-app .identity-dialog p{color:#475569;font-size:.82rem;line-height:1.4}.double-check-app .identity-dialog label{display:block;font-size:.78rem;font-weight:700;margin:8px 0 4px}.double-check-app .identity-dialog input,.double-check-app .identity-dialog select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px}.double-check-app .signature-canvas{display:block;width:100%;height:120px;border:1px solid #94a3b8;border-radius:8px;background:#fff;touch-action:none}.double-check-app .identity-actions{display:flex;gap:8px;margin-top:12px}.double-check-app .identity-actions button{flex:1}.double-check-app .workhead{display:flex;justify-content:space-between;align-items:center;gap:12px}.double-check-app .counter{color:var(--muted);font-size:.8rem;font-weight:700}.double-check-app .item-code{font-size:clamp(1.5rem,6vw,2.3rem);font-weight:900;letter-spacing:.02em;color:var(--navy);overflow-wrap:anywhere}.double-check-app .item-name{font-size:1.05rem;font-weight:650;margin:2px 0 14px}.double-check-app .facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.double-check-app .fact{border:1px solid var(--line);border-radius:12px;padding:11px;min-width:0}.double-check-app .fact span{display:block;color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;font-weight:800}.double-check-app .fact b{display:block;margin-top:3px;overflow-wrap:anywhere;font-size:1rem}.double-check-app .lot{color:#1d4ed8;font-size:1.25rem!important}.double-check-app .checktitle{font-weight:850;margin:17px 0 8px}.double-check-app .checkrow{display:grid;grid-template-columns:minmax(112px,.6fr) auto minmax(120px,1fr);gap:8px;align-items:center;padding:9px 0;border-top:1px solid #edf1f6}.double-check-app .checkrow:first-of-type{border-top:0}.double-check-app .checkname{font-weight:700;font-size:.84rem}.double-check-app .checkstate{font-size:.72rem;color:var(--muted);min-width:66px}.double-check-app .choice{display:flex;gap:6px}.double-check-app .choice button{padding:8px 12px;font-size:.75rem}.double-check-app .match{background:#dcfce7;color:#166534}.double-check-app .issue{background:#fee2e2;color:#991b1b}.double-check-app .choice button.selected{outline:2px solid currentColor;outline-offset:1px}.double-check-app .note{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:.8rem}.double-check-app .nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:15px}.double-check-app .primary{background:var(--blue);color:#fff}.double-check-app .secondary{background:#e2e8f0;color:#172033}.double-check-app .export{background:#15803d;color:white}.double-check-app .danger{background:#fee2e2;color:#991b1b}.double-check-app .actions{display:flex;gap:8px;flex-wrap:wrap}.double-check-app .banner{padding:10px 12px;border-radius:10px;margin:10px 0;font-size:.82rem}.double-check-app .banner.warn{background:#fff7ed;color:#9a3412}.double-check-app .banner.ok{background:#f0fdf4;color:#166534}.double-check-app .fieldlabel{display:block;font-size:.78rem;font-weight:700;margin:12px 0 5px}.double-check-app .field{width:100%;padding:10px;border:1px solid var(--line);border-radius:9px}
     @media(max-width:600px){.double-check-app main{margin:10px auto;padding:0 9px 25px}.double-check-app .panel{padding:13px;border-radius:13px}.double-check-app .top{padding:12px}.double-check-app .app-tabs{padding:0 9px}.double-check-app .summary{grid-template-columns:repeat(2,1fr)}.double-check-app .facts{gap:7px}.double-check-app .fact{padding:9px}.double-check-app .checkrow{grid-template-columns:1fr auto;gap:5px}.double-check-app .checkstate{grid-column:1}.double-check-app .choice{grid-column:2;grid-row:1/ span 2}.double-check-app .note{grid-column:1/-1}.double-check-app .nav button{padding:11px 12px}}
+
 </style>
 </head>
 <body>
@@ -400,6 +413,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <details id="packageDetails" class="picker-secondary-details">
       <summary>📦 Packaging details and quantity breakdown</summary>
+      <div id="packageIdentityDisplay" style="margin:4px 0 10px;color:var(--muted);font-size:.85rem;"></div>
       <label>Packaging Configuration (Pack × Carton × Catch)</label>
       <div class="inline-config">
         <div class="inline-col">
@@ -449,18 +463,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
 
     <div class="picker-main-actions">
-      <div class="confirm-placement-group">
-        <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
-        <div class="placement-box">
-          <label for="pickedPlacementInput">Placement</label>
-          <input type="text" id="pickedPlacementInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="4 chars">
-          <details class="placement-help">
-            <summary>Why?</summary>
-            <p>Enter up to 4 characters to record where you placed this item. It may be changed any time or left blank. An update is requested after every 10 confirmed picks.</p>
-            <p id="placementHint" class="placement-hint">Placement is saved with each confirmed item.</p>
-          </details>
-        </div>
-      </div>
+      <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
       <button type="button" class="secondary next-pending-btn" onclick="navigateNextPending()">Next Pending</button>
     </div>
 
@@ -475,13 +478,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   </div>
 
-  <div id="placementUpdateModal" class="placement-modal" role="dialog" aria-modal="true" aria-labelledby="placementModalTitle">
-    <div class="placement-modal-card">
-      <h2 id="placementModalTitle">Placement update required</h2>
-      <p>Confirm or update the placement for the next items. Enter up to 4 characters; you may leave it blank.</p>
-      <label for="placementUpdateInput">Next placement</label>
-      <input type="text" id="placementUpdateInput" inputmode="text" autocomplete="off" maxlength="4" placeholder="Blank allowed">
-      <button type="button" style="width:100%;margin-top:12px;" onclick="confirmPlacementUpdate()">Save and continue</button>
+  <div id="pickConfirmModal" class="pick-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="pickConfirmTitle">
+    <div class="pick-confirm-panel">
+      <div class="pick-confirm-heading"><div><h2 id="pickConfirmTitle">Confirm this pick</h2><div class="pick-confirm-code" id="pickConfirmCode">—</div></div><button class="pick-confirm-close" type="button" onclick="closePickConfirmation()">Cancel</button></div>
+      <div class="pick-confirm-name" id="pickConfirmName">—</div>
+      <div class="pick-confirm-facts">
+        <div class="pick-confirm-fact"><span>Location</span><b id="pickConfirmLocation">—</b></div>
+        <div class="pick-confirm-fact"><span>Lot / Serial</span><b id="pickConfirmLot">—</b></div>
+        <div class="pick-confirm-fact"><span>Expiry</span><b id="pickConfirmExpiry">—</b></div>
+        <div class="pick-confirm-fact"><span>Requested quantity</span><b id="pickConfirmRequested">—</b></div>
+        <div class="pick-confirm-fact"><span>Final picked quantity</span><b id="pickConfirmQuantity">—</b></div>
+        <div class="pick-confirm-fact"><span>Packaging</span><b id="pickConfirmPackaging">—</b></div>
+        <div class="pick-confirm-fact"><span>Picker</span><b id="pickConfirmIdentity">—</b></div>
+        <div class="pick-confirm-fact wide"><span>Picking remarks</span><b id="pickConfirmRemarks">None</b></div>
+      </div>
+      <div class="pick-placement-entry">
+        <label for="pickConfirmPlacement">Picked item placement (up to 4 characters; optional)</label>
+        <input type="text" id="pickConfirmPlacement" inputmode="text" autocomplete="off" maxlength="4" placeholder="Leave blank if not used">
+      </div>
+      <details class="picker-secondary-details"><summary>Placement explanation</summary><p>Enter a short location code for where you placed this item. The last entry is remembered for the next pick. You can leave it blank.</p></details>
+      <div class="pick-confirm-actions"><button class="secondary" type="button" onclick="closePickConfirmation()">Go back</button><button id="finalizePickBtn" type="button" class="confirm-item-btn" onclick="commitConfirmedPick()">✓ Confirm this pick</button></div>
     </div>
   </div>
 
@@ -522,7 +538,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <button class="export-btn" onclick="openFinalReportSortModal()">📥 Export Confirmed Pick Slip Excel</button>
     <button class="export-loc-btn" onclick="exportLocationDatabaseExcel()">📍 Export Updated Location File</button>
-    <button class="export-pkg-btn" onclick="exportPackagingDatabaseExcel()">📦 Export Packaging Database Excel</button>
+    <button class="export-pkg-btn" onclick="exportUnifiedMasterExcel()">📍📦 Export Unified Location &amp; Package Master</button>
     <button class="reset-btn" onclick="clearSessionAndReset()">🗑️ Clear Session & Start Fresh</button>
   </div>
 
@@ -676,7 +692,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="fact"><span>Expiry</span><b id="itemExpiry">—</b></div>
         <div class="fact"><span>Report quantity</span><b id="itemQty">—</b></div>
       </div>
-      <div class="checktitle">Check each report field against the item and slip</div>
+      <div class="checktitle">Check all report details against the item and slip</div>
+      <button class="match" id="matchAllBtn" type="button" style="width:100%;margin:8px 0 12px;min-height:48px;font-weight:800">✓ Match all details</button>
+      <div class="small" style="margin:0 0 10px">If any detail is wrong, use its Issue button and add a note.</div>
       <div id="checks"></div>
       <label class="fieldlabel">Checked by</label><div class="field" id="checkerDisplay" aria-live="polite">—</div>
       <div class="nav"><button class="secondary" id="prevBtn" type="button">← Previous</button><div class="actions"><button class="secondary" id="nextBtn" type="button">Next line →</button><button class="primary" id="nextPendingBtn" type="button">Next unchecked →</button></div></div>
@@ -712,6 +730,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let placementUpdateRequired = false;
     let pickList = [];
     let packagingDb = {};
+
+    function normalizePackagePart(value) {
+      return String(value ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+    }
+
+    function packageConfigKey(code, name, parentLot) {
+      return [code, name, parentLot].map(normalizePackagePart).join('::');
+    }
+
+    function getPackageConfig(item) {
+      if (!item) return null;
+      return packagingDb[packageConfigKey(item.code, item.name, item.parentLot)] || packagingDb[item.code] || null;
+    }
     let currentIndex = 0;
     let sessionId = '';
     let pickedByIdentity = null;
@@ -869,10 +900,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateHeaderDisplay();
       renderCurrentItem();
       renderSummaryTable();
-      if (placementUpdateRequired) {
-        document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
-        document.getElementById('placementUpdateModal').style.display = 'flex';
-      }
     }
 
     async function restorePersistentSession(saved) {
@@ -886,7 +913,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       pickedPlacementLocation = cleanPlacementValue(saved.pickedPlacementLocation || '');
       pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
       confirmedPickCount = Number(saved.confirmedPickCount ?? pickList.filter(item => item.itemPicked).length) || 0;
-      placementUpdateRequired = Boolean(saved.placementUpdateRequired);
+      placementUpdateRequired = false;
       currentIndex = Math.max(0, Math.min(Number(saved.currentIndex) || 0, pickList.length - 1));
       moveOrderNum = saved.moveOrderNum || 'UNKNOWN_MO';
       customerName = saved.customerName || 'UNKNOWN_CUSTOMER';
@@ -1067,7 +1094,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       pickList.forEach(item => { if (item.pickedPlacement !== undefined) item.pickedPlacement = cleanPlacementValue(item.pickedPlacement); });
       if (savedConfirmedPickCount !== null) confirmedPickCount = Number(savedConfirmedPickCount) || 0;
       else confirmedPickCount = pickList.filter(item => item.itemPicked).length;
-      if (savedPlacementUpdateRequired !== null) placementUpdateRequired = savedPlacementUpdateRequired === 'true';
+      // Placement is now reviewed on every pick confirmation, so an older
+      // ten-pick reminder flag must not reopen the retired placement dialog.
+      placementUpdateRequired = false;
       if (savedSessionId) sessionId = savedSessionId;
       if (savedPickedByIdentity) pickedByIdentity = JSON.parse(savedPickedByIdentity);
       if (savedMo) moveOrderNum = savedMo;
@@ -1107,10 +1136,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('navGroup').classList.remove('hidden');
         renderCurrentItem();
         renderSummaryTable();
-        if (placementUpdateRequired) {
-          document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
-          document.getElementById('placementUpdateModal').style.display = 'flex';
-        }
         if (sessionId) saveSessionState();
       }
     }
@@ -1759,17 +1784,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         let count = 0;
         rows.forEach(r => {
-          const code = r['Item Code'] || r['Item'] || r['Code'];
+          const code = r['Item Code'] || r['Item Number'] || r['Item'] || r['Code'];
           if (code) {
             const itemCodeStr = String(code).trim();
-            packagingDb[itemCodeStr] = {
+            const name = r['Item Description'] || r['Description'] || r['Name'] || '';
+            const parentLot = r['Parent Lot (Brand)'] || r['Parent Lot'] || r['Parent Lot Number'] || r['Brand'] || '';
+            const config = {
               code: itemCodeStr,
-              name: r['Item Description'] || r['Description'] || r['Name'] || '',
+              name,
+              parentLot,
               packSize: parseInt(r['Pack Size (Units/Pk)'] || r['Pack Size'] || r['Pack'] || 0) || 0,
               cartonSize: parseInt(r['Carton Size (Pks/Ctn)'] || r['Carton Size'] || r['Carton'] || 0) || 0,
               catchSize: parseInt(r['Catch Size (Pks/Ctch)'] || r['Catch Size'] || r['Catch'] || 0) || 0,
               stripSize: parseInt(r['Strip Size (Units/Strip)'] || r['Strip Size'] || r['Strip'] || 1) || 1
             };
+            packagingDb[parentLot ? packageConfigKey(itemCodeStr, name, parentLot) : itemCodeStr] = config;
             count++;
           }
         });
@@ -2113,6 +2142,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const descIdx = headers.findIndex(h => h.includes('description'));
         const locIdx = headers.findIndex(h => h.includes('locator') || h.includes('location'));
 
+        const parentLotIdx = headers.findIndex(h => h.includes('parent') && h.includes('lot'));
         let lotIdx = headers.findIndex(h => (h.includes('lot') || h.includes('serial')) && !h.includes('parent'));
         if (lotIdx === -1) {
           lotIdx = headers.findIndex(h => h.includes('lot') || h.includes('serial'));
@@ -2236,6 +2266,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             line: lineIdx !== -1 ? (parseInt(row[lineIdx]) || (i - headerIdx)) : (i - headerIdx),
             code: itemCode,
             name: descIdx !== -1 ? (row[descIdx] || 'N/A') : 'N/A',
+            parentLot: parentLotIdx !== -1 && row[parentLotIdx] != null ? String(row[parentLotIdx]).trim() : '',
             location: shelfLocation,
             sourceLocation: fallbackLoc,
             locationMatched,
@@ -2350,9 +2381,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const ctchSize = parseInt(document.getElementById('catchSizeInPacks').value) || 0;
       const stpSize = parseInt(document.getElementById('stripSize').value) || 1;
 
-      packagingDb[item.code] = {
+      const configKey = packageConfigKey(item.code, item.name, item.parentLot);
+      packagingDb[configKey] = {
         code: item.code,
         name: item.name,
+        parentLot: item.parentLot || '',
         packSize: pSize,
         cartonSize: ctnSize,
         catchSize: ctchSize,
@@ -2397,34 +2430,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return String(value ?? '').toUpperCase().slice(0, 4);
     }
 
-    function updatePlacementHint() {
-      const remaining = confirmedPickCount % 10 === 0 ? 10 : 10 - (confirmedPickCount % 10);
-      const countLabel = document.getElementById('placementHint');
-      if (countLabel) countLabel.textContent = `${confirmedPickCount} confirmed picks · placement can be changed anytime · update prompt after ${remaining} more pick${remaining === 1 ? '' : 's'} (blank is allowed).`;
-    }
-
-    document.getElementById('pickedPlacementInput').addEventListener('input', function() {
+    document.getElementById('pickConfirmPlacement').addEventListener('input', function() {
       const value = cleanPlacementValue(this.value);
       if (this.value !== value) this.value = value;
-      pickedPlacementLocation = value;
+    });
+
+    function closePickConfirmation() { document.getElementById('pickConfirmModal').style.display = 'none'; }
+
+    function confirmFullPicked() {
       const item = pickList[currentIndex];
-      if (item && item.itemPicked) item.pickedPlacement = value;
-      saveSessionState();
-      renderSummaryTable();
-    });
-
-    document.getElementById('placementUpdateInput').addEventListener('input', function() {
-      const value = cleanPlacementValue(this.value);
-      if (this.value !== value) this.value = value;
-    });
-
-    function confirmPlacementUpdate() {
-      pickedPlacementLocation = cleanPlacementValue(document.getElementById('placementUpdateInput').value);
-      placementUpdateRequired = false;
-      document.getElementById('pickedPlacementInput').value = pickedPlacementLocation;
-      document.getElementById('placementUpdateModal').style.display = 'none';
-      saveSessionState();
-      navigateNextPending();
+      if (!item) return;
+      document.getElementById('pickConfirmCode').textContent = item.code || '—';
+      document.getElementById('pickConfirmName').textContent = item.name || '—';
+      document.getElementById('pickConfirmLocation').textContent = item.location || 'Not set';
+      document.getElementById('pickConfirmLot').textContent = item.lot || '—';
+      document.getElementById('pickConfirmExpiry').textContent = item.expiry || '—';
+      document.getElementById('pickConfirmRequested').textContent = `${item.requestedQty ?? 0} ${item.uom || ''}`.trim();
+      document.getElementById('pickConfirmQuantity').textContent = `${document.getElementById('pickedQtyInput').value || 0} ${item.uom || ''}`.trim();
+      document.getElementById('pickConfirmPackaging').textContent = `${describeCurrentPackaging()}. Breakdown: ${document.getElementById('resCartons').textContent} cartons, ${document.getElementById('resCatches').textContent} catches, ${document.getElementById('resPacks').textContent} packs, ${document.getElementById('resStrips').textContent} strips.`;
+      document.getElementById('pickConfirmIdentity').textContent = pickedByIdentity?.display || '—';
+      document.getElementById('pickConfirmRemarks').textContent = document.getElementById('itemComment').value.trim() || 'None';
+      document.getElementById('pickConfirmPlacement').value = cleanPlacementValue(item.itemPicked && item.pickedPlacement !== undefined ? item.pickedPlacement : pickedPlacementLocation);
+      document.getElementById('pickConfirmModal').style.display = 'flex';
+      document.getElementById('pickConfirmPlacement').focus();
     }
 
     let lotSpeechTimer = null;
@@ -2805,12 +2833,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       speakVoiceResponse(`I did not recognize “${phrase}”. Available examples: ${voicePhrases.readPackage}, ${voicePhrases.setPack.replace('{number}', '10')}, ${voicePhrases.confirmLot}, or ${voicePhrases.nextPending}.`);
     }
 
-    function confirmFullPicked() {
+    function commitConfirmedPick() {
       const item = pickList[currentIndex];
+      if (!item) return;
       const newlyConfirmed = !item.itemPicked;
       item.itemPicked = true;
       item.comment = document.getElementById('itemComment').value.trim();
-      pickedPlacementLocation = cleanPlacementValue(document.getElementById('pickedPlacementInput').value);
+      pickedPlacementLocation = cleanPlacementValue(document.getElementById('pickConfirmPlacement').value);
       item.pickedPlacement = pickedPlacementLocation;
       if (newlyConfirmed) confirmedPickCount += 1;
 
@@ -2820,17 +2849,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       saveSessionState();
+      closePickConfirmation();
       updateStatusBadge();
       renderSummaryTable();
-      updatePlacementHint();
-      if (newlyConfirmed && confirmedPickCount > 0 && confirmedPickCount % 10 === 0) {
-        placementUpdateRequired = true;
-        document.getElementById('placementUpdateInput').value = pickedPlacementLocation;
-        document.getElementById('placementUpdateModal').style.display = 'flex';
-        document.getElementById('placementUpdateInput').focus();
-        saveSessionState();
-        return;
-      }
+      placementUpdateRequired = false;
       navigateNextPending();
     }
 
@@ -2938,10 +2960,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('pickedQtyInput').value = item.finalPickedQty;
       document.getElementById('pickedQtyInput').disabled = true;
       document.getElementById('itemComment').value = item.comment || "";
-      document.getElementById('pickedPlacementInput').value = item.itemPicked && item.pickedPlacement !== undefined
-        ? cleanPlacementValue(item.pickedPlacement)
-        : cleanPlacementValue(pickedPlacementLocation);
-
       document.getElementById('locDisplay').innerText = item.location;
       document.getElementById('itemCodeDisplay').innerText = `ITEM: ${item.code}`;
       const itemNameDisplay = document.getElementById('itemNameDisplay');
@@ -2956,9 +2974,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const lotFontSize = Math.max(0.65, baseLotSize * (18 / Math.max(lotLength, 18)));
       document.getElementById('lotDisplay').style.fontSize = `${lotFontSize}rem`;
       document.getElementById('expDisplay').innerText = item.expiry;
+      document.getElementById('packageIdentityDisplay').innerText = `Package identity: ${item.code} · ${item.name} · Parent Lot: ${item.parentLot || '(not provided in pick slip)'}`;
 
-      if (packagingDb[item.code]) {
-        const saved = packagingDb[item.code];
+      const savedPackage = getPackageConfig(item);
+      if (savedPackage) {
+        const saved = savedPackage;
         document.getElementById('packSize').value = saved.packSize || '';
         document.getElementById('cartonSizeInPacks').value = saved.cartonSize || '';
         document.getElementById('catchSizeInPacks').value = saved.catchSize || '';
@@ -2971,7 +2991,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       updateLotUIState();
       updateStatusBadge();
-      updatePlacementHint();
       calculateLogicalBreakdown(item.finalPickedQty);
       if (item.lotConfirmed) stopLotSpeech();
       else speakLotSerial(item.lot);
@@ -3626,29 +3645,45 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       XLSX.writeFile(workbook, `HMC_Store_Locations_${timestamp}.xlsx`);
     }
 
-    // Export 3: Packaging Configuration Database
-    function exportPackagingDatabaseExcel() {
-      const pkgKeys = Object.keys(packagingDb);
-      if (pkgKeys.length === 0) {
-        alert("No packaging configurations have been saved yet.");
+    // One master row per item + description + parent lot (brand); item location repeats on each package variant.
+    function exportUnifiedMasterExcel() {
+      const sourceConfigs = Object.values(packagingDb);
+      const expandedConfigs = sourceConfigs.flatMap(config => {
+        if (config.parentLot) return [config];
+        const parentLots = [...new Set(pickList
+          .filter(item => String(item.code).trim() === String(config.code).trim() &&
+            normalizePackagePart(item.name) === normalizePackagePart(config.name) && item.parentLot)
+          .map(item => item.parentLot.trim()))];
+        return parentLots.length ? parentLots.map(parentLot => ({ ...config, parentLot })) : [config];
+      });
+      const configsByIdentity = new Map();
+      expandedConfigs.forEach(config => {
+        configsByIdentity.set(packageConfigKey(config.code, config.name, config.parentLot), config);
+      });
+      const configs = [...configsByIdentity.values()];
+      if (!configs.length) {
+        alert('No package configurations have been saved or imported yet.');
         return;
       }
 
-      const exportData = pkgKeys.map(code => ({
-        "Item Code": packagingDb[code].code,
-        "Item Description": packagingDb[code].name,
-        "Pack Size (Units/Pk)": packagingDb[code].packSize,
-        "Carton Size (Pks/Ctn)": packagingDb[code].cartonSize,
-        "Catch Size (Pks/Ctch)": packagingDb[code].catchSize,
-        "Strip Size (Units/Strip)": packagingDb[code].stripSize
-      }));
+      const exportData = configs.map(config => ({
+        'Item Number': config.code,
+        'Item Description': config.name,
+        'Parent Lot (Brand)': config.parentLot || '',
+        'Location': locationMap[String(config.code).trim()] || '',
+        'Pack Size (Units/Pk)': config.packSize || '',
+        'Carton Size (Pks/Ctn)': config.cartonSize || '',
+        'Catch Size (Pks/Ctch)': config.catchSize || '',
+        'Strip Size (Units/Strip)': config.stripSize || ''
+      })).sort((a, b) => String(a['Item Number']).localeCompare(String(b['Item Number'])) ||
+        String(a['Item Description']).localeCompare(String(b['Item Description'])) ||
+        String(a['Parent Lot (Brand)']).localeCompare(String(b['Parent Lot (Brand)'])));
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
+      worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20}];
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Packaging Database");
-
-      const timestamp = getFormattedTimestamp();
-      XLSX.writeFile(workbook, `HMC_Packaging_Database_${timestamp}.xlsx`);
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Location Package Master');
+      XLSX.writeFile(workbook, `HMC_Location_Package_Master_${getFormattedTimestamp()}.xlsx`);
     }
   </script>
 
@@ -3675,6 +3710,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     $('nextPendingBtn').onclick = goNextIncomplete;
     $('newReportBtn').onclick = newReport;
     $('speakBtn').onclick = speakCurrent;
+    $('matchAllBtn').onclick = matchAllDetails;
     $('auditNotes').addEventListener('input', saveSession);
     $('checkerIdentityMethod').addEventListener('change', updateCheckerIdentityMethod);
     $('checkerIdentityForm').addEventListener('submit', completeCheckerIdentitySetup);
@@ -3734,7 +3770,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const issues=session.rows.filter(row=>FIELDS.some(f=>row.checks[f.key]?.state==='issue')).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=issues;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=issues?`${issues} line${issues===1?' has':'s have'} reported issues. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
     function isComplete(row){return FIELDS.every(field=>['match','issue'].includes(row.checks[field.key]?.state)&&(!row.checks[field.key]||row.checks[field.key].state!=='issue'||String(row.checks[field.key].note||'').trim()))&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
     function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('prevBtn').disabled=current===0;$('nextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?(FIELDS.some(f=>row.checks[f.key]?.state==='issue')?'ISSUE RECORDED':'CHECKED'):'NOT COMPLETE';renderChecks(row);updateSummary();}
-    function renderChecks(row){const holder=$('checks');holder.replaceChildren();FIELDS.forEach(field=>{const currentCheck=row.checks[field.key]||{};const line=document.createElement('div');line.className='checkrow';const label=document.createElement('div');label.className='checkname';label.textContent=field.label;const state=document.createElement('div');state.className='checkstate';state.textContent=currentCheck.state==='match'?'Match recorded':currentCheck.state==='issue'?'Issue recorded':'Choose result';const choice=document.createElement('div');choice.className='choice';[['match','Match'],['issue','Issue']].forEach(([value,caption])=>{const button=document.createElement('button');button.type='button';button.className=`${value==='match'?'match':'issue'}${currentCheck.state===value?' selected':''}`;button.textContent=caption;button.setAttribute('aria-pressed',String(currentCheck.state===value));button.onclick=()=>{row.checks[field.key]={state:value,note:currentCheck.note||''};renderChecks(row);saveSession();showLine(current);};choice.append(button);});line.append(label,state,choice);if(currentCheck.state==='issue'){const note=document.createElement('input');note.className='note';note.maxLength=180;note.placeholder=`What is wrong with ${field.label.toLowerCase()}? Required`;note.value=currentCheck.note||'';note.setAttribute('aria-label',`${field.label} discrepancy`);note.oninput=()=>{row.checks[field.key].note=note.value;saveSession();};line.append(note);}holder.append(line);});}
+    function matchAllDetails(){if(!session)return;const row=session.rows[current];FIELDS.forEach(field=>{row.checks[field.key]={state:'match',note:''};});renderChecks(row);saveSession();showLine(current);}
+    function renderChecks(row){const holder=$('checks');holder.replaceChildren();FIELDS.forEach(field=>{const currentCheck=row.checks[field.key]||{};const line=document.createElement('div');line.className='checkrow';const label=document.createElement('div');label.className='checkname';label.textContent=field.label;const state=document.createElement('div');state.className='checkstate';state.textContent=currentCheck.state==='match'?'Matched with all details':currentCheck.state==='issue'?'Issue recorded':'Not matched yet';const choice=document.createElement('div');choice.className='choice';const button=document.createElement('button');button.type='button';button.className=`issue${currentCheck.state==='issue'?' selected':''}`;button.textContent=currentCheck.state==='issue'?'Issue recorded':'Issue';button.setAttribute('aria-pressed',String(currentCheck.state==='issue'));button.onclick=()=>{row.checks[field.key]={state:'issue',note:currentCheck.note||''};renderChecks(row);saveSession();showLine(current);};choice.append(button);line.append(label,state,choice);if(currentCheck.state==='issue'){const note=document.createElement('input');note.className='note';note.maxLength=180;note.placeholder=`What is wrong with ${field.label.toLowerCase()}? Required`;note.value=currentCheck.note||'';note.setAttribute('aria-label',`${field.label} discrepancy`);note.oninput=()=>{row.checks[field.key].note=note.value;saveSession();};line.append(note);}holder.append(line);});}
     function goNextIncomplete(){saveSession();for(let offset=1;offset<=session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});}
     function speakCurrent(){if(!session)return;if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const row=session.rows[current];const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location ${row.location||'not set'}. Lot number ${row.lot||'not set'}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.9;speechSynthesis.speak(utterance);}
     function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
