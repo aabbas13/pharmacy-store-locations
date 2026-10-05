@@ -122,12 +122,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .generic-item-row td:first-child {
       border-left: 4px solid #f59e0b;
     }
+    .generic-item-row.picked-row td { background: #dcfce7 !important; }
 
     .item-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.75rem; color: #1d4ed8; margin: 4px 0 6px; background: #eff6ff; padding: 5px 8px; border-radius: 6px; }
     .item-meta > div:first-child { flex: 1; min-width: 0; }
     .lot-value { display: block; color: #1d4ed8; font-size: clamp(1.35rem, 6vw, 2.1rem); line-height: 1.08; font-weight: 850; letter-spacing: 0.06em; overflow-wrap: anywhere; margin-top: 1px; }
     .speak-lot-btn { padding: 3px 7px; margin-top: 2px; font-size: 0.72rem; border-radius: 7px; }
-    .picker-main-actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 6px; margin: 5px 0 9px; }
+    .picker-main-actions { display: grid; grid-template-columns: 1fr; gap: 6px; margin: 5px 0 9px; }
     .picker-main-actions #confirmItemBtn { min-width: 0; margin: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
     .picker-main-actions .next-pending-btn { min-width: 0; padding: 8px 5px; font-size: 0.78rem; line-height: 1.1; }
     .picker-secondary-details { margin: 5px 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: #fff; scroll-margin-top: 10px; }
@@ -203,6 +204,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     th { background-color: #f1f5f9; position: sticky; top: 0; z-index: 10; font-weight: bold; color: #334155; }
     tr:nth-child(even) { background-color: #f8fafc; }
     tr.selected-row { background-color: #e0f2fe !important; font-weight: bold; }
+    tr.picked-row, tr.picked-row.selected-row { background-color: #dcfce7 !important; }
+    .picker-nav-stack { display:grid; gap:6px; margin:8px 0 12px; }
+    .picker-nav-stack .nav-buttons { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+    .picker-nav-stack button { min-width:0; padding:9px 6px; font-size:.82rem; }
 
     .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; }
     .modal-content { background: white; padding: 20px; border-radius: 16px; width: 340px; text-align: center; max-height: 90vh; overflow-y: auto; }
@@ -364,6 +369,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button id="btnTableView" class="view-btn" onclick="switchView('table')">📋 Interactive Table Summary View</button>
   </div>
 
+  <div id="voiceControlCard" class="card hidden">
+    <small id="voiceStatus" class="voice-status" role="status" aria-live="polite">Voice mode is off. Start Voice and allow microphone access. Recognition may use your browser’s speech service.</small>
+    <details class="voice-commands-help">
+      <summary>🎙 Voice Commands — tap to expand</summary>
+      <p>Choose a phrase for each command. Choose “Custom phrase…” to enter your own wording.</p>
+      <div id="voicePhraseSettings" class="voice-phrase-settings"></div>
+      <button type="button" class="secondary voice-phrase-save" onclick="saveVoicePhraseSettings()">Save my phrases</button>
+      <small id="voicePhraseSaveStatus" class="voice-phrase-save-status" aria-live="polite"></small>
+      <p>For package sizes, keep <strong>{number}</strong> in the phrase (for example, “set pack size {number}”). Actions always ask before proceeding.</p>
+      <ul id="voiceCommandPreview"></ul>
+    </details>
+  </div>
+
   <!-- Step 2A: Item 1-by-1 View -->
   <div id="pickerCard" class="card hidden">
     <!-- Live Item / Description Search -->
@@ -380,17 +398,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <span class="item-counter" id="itemCounter">Item 1 of --</span>
       <span id="statusBadge" class="status-badge badge-pending">PENDING</span>
     </div>
-    <small id="voiceStatus" class="voice-status" role="status" aria-live="polite">Voice mode is off. Start Voice and allow microphone access. Recognition may use your browser’s speech service.</small>
-    <details class="voice-commands-help">
-      <summary>🎙 Voice Commands — tap to expand</summary>
-      <p>Choose a phrase for each command. Choose “Custom phrase…” to enter your own wording.</p>
-      <div id="voicePhraseSettings" class="voice-phrase-settings"></div>
-      <button type="button" class="secondary voice-phrase-save" onclick="saveVoicePhraseSettings()">Save my phrases</button>
-      <small id="voicePhraseSaveStatus" class="voice-phrase-save-status" aria-live="polite"></small>
-      <p>For package sizes, keep <strong>{number}</strong> in the phrase (for example, “set pack size {number}”). Actions always ask before proceeding.</p>
-      <ul id="voiceCommandPreview"></ul>
-    </details>
-
     <div class="item-code">
       <span id="itemCodeDisplay">ITEM: --</span>
       <span id="lineNumDisplay" style="color: var(--primary);">LINE: --</span>
@@ -464,7 +471,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <div class="picker-main-actions">
       <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
-      <button type="button" class="secondary next-pending-btn" onclick="navigateNextPending()">Next Pending</button>
+    </div>
+    <div class="picker-nav-stack">
+      <div class="nav-buttons"><button id="pickerNextPendingBtn" type="button" class="secondary" onclick="navigateNextPending()">Next Pending</button><button id="pickerPrevPendingBtn" type="button" class="secondary" onclick="navigatePreviousPending()">Previous Pending</button></div>
+      <div class="nav-buttons"><button id="pickerPreviousItemBtn" type="button" class="secondary" onclick="navigateStep(-1)">← Previous Item</button><button id="pickerNextItemBtn" type="button" class="secondary" onclick="navigateStep(1)">Next Item →</button></div>
     </div>
 
     <!-- Optional Comment Input -->
@@ -532,10 +542,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <!-- Bottom Navigation & Exports -->
   <div id="navGroup" class="hidden">
-    <div class="nav-buttons">
-      <button id="prevBtn" class="secondary" onclick="navigateStep(-1)">Previous</button>
-      <button id="nextBtn" onclick="navigateNextPending()">Next Pending</button>
-    </div>
     <button class="export-btn" onclick="openFinalReportSortModal()">📥 Export Confirmed Pick Slip Excel</button>
     <button class="export-loc-btn" onclick="exportLocationDatabaseExcel()">📍 Export Updated Location File</button>
     <button class="export-pkg-btn" onclick="exportUnifiedMasterExcel()">📍📦 Export Unified Location &amp; Package Master</button>
@@ -678,7 +684,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </section>
     <section id="sessionPanel" class="panel hidden">
       <div class="workhead"><div><b id="sourceName">Report</b><div class="small" id="sessionMeta"></div></div><div class="actions"><button class="secondary" id="speakBtn" type="button">🔊 Read item</button><button class="danger" id="newReportBtn" type="button">New report</button></div></div>
-      <div class="summary"><div class="metric"><b id="totalCount">0</b><span>Report lines</span></div><div class="metric"><b id="checkedCount">0</b><span>Checked</span></div><div class="metric"><b id="issueCount">0</b><span>Lines with issues</span></div><div class="metric"><b id="remainingCount">0</b><span>Remaining</span></div></div>
+      <div class="summary"><div class="metric"><b id="totalCount">0</b><span>Report lines</span></div><div class="metric"><b id="checkedCount">0</b><span>Checked</span></div><div class="metric"><b id="issueCount">0</b><span>Lines with comments</span></div><div class="metric"><b id="remainingCount">0</b><span>Remaining</span></div></div>
       <div class="progress-label"><span id="progressText">0 of 0 complete</span><span id="percentText">0%</span></div><div class="progress-wrap"><div id="progressBar" class="progress"></div></div>
       <div id="pendingBanner" class="banner warn hidden"></div>
     </section>
@@ -694,15 +700,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div class="checktitle">Check all report details against the item and slip</div>
       <button class="match" id="matchAllBtn" type="button" style="width:100%;margin:8px 0 12px;min-height:48px;font-weight:800">✓ Match all details</button>
-      <div class="small" style="margin:0 0 10px">If any detail is wrong, use its Issue button and add a note.</div>
-      <div id="checks"></div>
+      <label class="fieldlabel" for="lineComment">Comments or issues (optional)</label>
+      <textarea class="field" id="lineComment" rows="3" maxlength="500" placeholder="Record any discrepancy or useful detail for this line"></textarea>
       <label class="fieldlabel">Checked by</label><div class="field" id="checkerDisplay" aria-live="polite">—</div>
-      <div class="nav"><button class="secondary" id="prevBtn" type="button">← Previous</button><div class="actions"><button class="secondary" id="nextBtn" type="button">Next line →</button><button class="primary" id="nextPendingBtn" type="button">Next unchecked →</button></div></div>
+      <div class="nav"><button class="secondary" id="dcPrevBtn" type="button">← Previous</button><div class="actions"><button class="secondary" id="dcNextBtn" type="button">Next line →</button></div></div>
+      <button class="primary" id="nextPendingBtn" type="button" style="position:fixed;right:max(16px,calc((100vw - 820px)/2));bottom:max(16px,env(safe-area-inset-bottom));z-index:30;box-shadow:0 8px 24px rgba(15,23,42,.28);min-height:52px;padding:12px 18px;border-radius:999px">Next unchecked →</button>
     </section>
     <section id="finishPanel" class="panel hidden">
       <h2 style="margin:0 0 6px">Check summary</h2><p class="small" id="finishMessage"></p>
       <label class="fieldlabel" for="auditNotes">Overall notes (optional)</label><textarea class="field" id="auditNotes" rows="3" placeholder="Add handover notes or follow-up context"></textarea>
-      <div class="actions" style="margin-top:12px"><button class="export" id="exportBtn" type="button">Download double-check report</button><button class="secondary" id="reviewIssuesBtn" type="button">Review issues</button></div>
+      <div class="actions" style="margin-top:12px"><button class="export" id="exportBtn" type="button">Download double-check report</button><button class="secondary" id="reviewIssuesBtn" type="button">Review comments</button></div>
       <p class="small">Your progress is saved on this device, including if the browser closes. Export creates a separate audit workbook; it does not change the original picker report.</p>
     </section>
   </main>
@@ -895,6 +902,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function activateSavedSessionView() {
       document.getElementById('uploadCard').classList.add('hidden');
       document.getElementById('viewToggleCard').classList.remove('hidden');
+      document.getElementById('voiceControlCard').classList.remove('hidden');
       document.getElementById('pickerCard').classList.remove('hidden');
       document.getElementById('navGroup').classList.remove('hidden');
       updateHeaderDisplay();
@@ -1132,6 +1140,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         updateHeaderDisplay();
         document.getElementById('uploadCard').classList.add('hidden');
         document.getElementById('viewToggleCard').classList.remove('hidden');
+        document.getElementById('voiceControlCard').classList.remove('hidden');
         document.getElementById('pickerCard').classList.remove('hidden');
         document.getElementById('navGroup').classList.remove('hidden');
         renderCurrentItem();
@@ -2339,6 +2348,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
       document.getElementById('uploadCard').classList.add('hidden');
       document.getElementById('viewToggleCard').classList.remove('hidden');
+      document.getElementById('voiceControlCard').classList.remove('hidden');
       document.getElementById('pickerCard').classList.remove('hidden');
       document.getElementById('navGroup').classList.remove('hidden');
       renderCurrentItem();
@@ -2452,7 +2462,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('pickConfirmRemarks').textContent = document.getElementById('itemComment').value.trim() || 'None';
       document.getElementById('pickConfirmPlacement').value = cleanPlacementValue(item.itemPicked && item.pickedPlacement !== undefined ? item.pickedPlacement : pickedPlacementLocation);
       document.getElementById('pickConfirmModal').style.display = 'flex';
-      document.getElementById('pickConfirmPlacement').focus();
     }
 
     let lotSpeechTimer = null;
@@ -2889,8 +2898,26 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
       }
 
+      if (pickList[currentIndex] && !pickList[currentIndex].itemPicked) {
+        alert('This is the only pending item in the pick list.');
+        return;
+      }
       alert("🎉 All items in the pick list are now confirmed and picked!");
       openFinalReportSortModal();
+    }
+
+    function navigatePreviousPending() {
+      for (let offset = 1; offset < pickList.length; offset++) {
+        const i = (currentIndex - offset + pickList.length) % pickList.length;
+        if (!pickList[i].itemPicked) {
+          currentIndex = i;
+          saveSessionState();
+          renderCurrentItem();
+          renderSummaryTable();
+          return;
+        }
+      }
+      alert('There are no other pending items to go back to.');
     }
 
     function navigateStep(direction) {
@@ -2995,7 +3022,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (item.lotConfirmed) stopLotSpeech();
       else speakLotSerial(item.lot);
 
-      document.getElementById('prevBtn').disabled = currentIndex === 0;
+      document.getElementById('pickerPreviousItemBtn').disabled = currentIndex === 0;
+      document.getElementById('pickerNextItemBtn').disabled = currentIndex >= pickList.length - 1;
+      const hasOtherPending = pickList.some((candidate, idx) => idx !== currentIndex && !candidate.itemPicked);
+      document.getElementById('pickerNextPendingBtn').disabled = !hasOtherPending;
+      document.getElementById('pickerPrevPendingBtn').disabled = !hasOtherPending;
       document.getElementById('pickerCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
@@ -3007,6 +3038,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       pickList.forEach((item, idx) => {
         const tr = document.createElement('tr');
         if (idx === currentIndex) tr.classList.add('selected-row');
+        if (item.itemPicked) tr.classList.add('picked-row');
         if (isGenericItem(item)) tr.classList.add('generic-item-row');
         tr.style.cursor = 'pointer';
         tr.onclick = () => jumpToItem(idx);
@@ -3691,10 +3723,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 (() => {
     'use strict';
     const STORE_KEY = 'hmc_double_check_session_v2';
-    const FIELDS = [
-      {key:'code', label:'Item code'}, {key:'location', label:'Location'},
-      {key:'lot', label:'Lot / serial'}, {key:'expiry', label:'Expiry'}, {key:'qty', label:'Quantity'}, {key:'status', label:'Report status'}
-    ];
+    const LEGACY_FIELD_KEYS = ['code','location','lot','expiry','qty','status'];
     let session = null, current = 0, drawing = null;
     const $ = id => document.getElementById(id);
     const text = value => value == null || String(value).trim() === '' ? '—' : String(value).trim();
@@ -3705,19 +3734,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
     drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
     drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); const file=e.dataTransfer.files[0]; if(file) loadReport(file); });
-    $('prevBtn').onclick = () => showLine(Math.max(0,current-1));
-    $('nextBtn').onclick = () => showLine(Math.min(session.rows.length-1,current+1));
+    $('dcPrevBtn').onclick = () => showLine(Math.max(0,current-1));
+    $('dcNextBtn').onclick = () => showLine(Math.min(session.rows.length-1,current+1));
     $('nextPendingBtn').onclick = goNextIncomplete;
     $('newReportBtn').onclick = newReport;
     $('speakBtn').onclick = speakCurrent;
     $('matchAllBtn').onclick = matchAllDetails;
+    $('lineComment').addEventListener('input', () => { if(session){session.rows[current].comment=$('lineComment').value;saveSession();} });
     $('auditNotes').addEventListener('input', saveSession);
     $('checkerIdentityMethod').addEventListener('change', updateCheckerIdentityMethod);
     $('checkerIdentityForm').addEventListener('submit', completeCheckerIdentitySetup);
     $('clearCheckerSignature').addEventListener('click', clearCheckerSignature);
     setupSignatureCanvas();
     $('exportBtn').onclick = exportAudit;
-    $('reviewIssuesBtn').onclick = () => { const idx=session.rows.findIndex(row=>FIELDS.some(f=>row.checks[f.key]?.state==='issue')); if(idx>=0) showLine(idx); };
+    $('reviewIssuesBtn').onclick = () => { const idx=session.rows.findIndex(row=>String(row.comment||'').trim()); if(idx>=0) showLine(idx); };
 
     function updateCheckerIdentityMethod(){const method=$('checkerIdentityMethod').value;const label=$('checkerIdentityValueLabel');const field=$('checkerIdentityValue');label.textContent=method==='initials'?'Checker initials':method==='signature'?'Name or initials shown with signature':'Checker name';field.placeholder=method==='initials'?'Enter initials':method==='signature'?'Enter name or initials':'Enter checker name';$('checkerSignatureWrap').classList.toggle('hidden',method!=='signature');}
     function setupSignatureCanvas(){const canvas=$('checkerSignatureCanvas');const ctx=canvas.getContext('2d');ctx.lineWidth=5;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#111827';canvas.addEventListener('pointerdown',event=>{event.preventDefault();drawing={x:event.offsetX*canvas.width/canvas.clientWidth,y:event.offsetY*canvas.height/canvas.clientHeight};canvas.setPointerCapture(event.pointerId);});canvas.addEventListener('pointermove',event=>{if(!drawing)return;const x=event.offsetX*canvas.width/canvas.clientWidth,y=event.offsetY*canvas.height/canvas.clientHeight;ctx.beginPath();ctx.moveTo(drawing.x,drawing.y);ctx.lineTo(x,y);ctx.stroke();drawing={x,y};});const stop=()=>drawing=null;canvas.addEventListener('pointerup',stop);canvas.addEventListener('pointercancel',stop);canvas.addEventListener('lostpointercapture',stop);}
@@ -3757,25 +3787,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const qty=revised?revised:req;
           const code=String(raw[codeCol]).trim();
           const pending=status==='PENDING';
-          rows.push({code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,checks:{}});
+          rows.push({code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,matched:false,comment:''});
         }
         if(!rows.length) throw new Error('No item rows were found in this report.');
         session={fileName:file.name,importedAt:new Date().toISOString(),rows,checker:'',checkerIdentity:null,notes:''};
         current=0; $('checkerIdentityMethod').value='name';$('checkerIdentityValue').value='';clearCheckerSignature();updateCheckerIdentityMethod();$('checkerIdentitySetup').style.display='flex';$('checkerIdentityValue').focus();
       }catch(error){ $('importStatus').textContent=error.message||String(error); }
     }
-    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
-    function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
-    function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';updateSummary();showLine(current); }
-    function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const issues=session.rows.filter(row=>FIELDS.some(f=>row.checks[f.key]?.state==='issue')).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=issues;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=issues?`${issues} line${issues===1?' has':'s have'} reported issues. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
-    function isComplete(row){return FIELDS.every(field=>['match','issue'].includes(row.checks[field.key]?.state)&&(!row.checks[field.key]||row.checks[field.key].state!=='issue'||String(row.checks[field.key].note||'').trim()))&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
-    function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('prevBtn').disabled=current===0;$('nextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?(FIELDS.some(f=>row.checks[f.key]?.state==='issue')?'ISSUE RECORDED':'CHECKED'):'NOT COMPLETE';renderChecks(row);updateSummary();}
-    function matchAllDetails(){if(!session)return;const row=session.rows[current];FIELDS.forEach(field=>{row.checks[field.key]={state:'match',note:''};});renderChecks(row);saveSession();showLine(current);}
-    function renderChecks(row){const holder=$('checks');holder.replaceChildren();FIELDS.forEach(field=>{const currentCheck=row.checks[field.key]||{};const line=document.createElement('div');line.className='checkrow';const label=document.createElement('div');label.className='checkname';label.textContent=field.label;const state=document.createElement('div');state.className='checkstate';state.textContent=currentCheck.state==='match'?'Matched with all details':currentCheck.state==='issue'?'Issue recorded':'Not matched yet';const choice=document.createElement('div');choice.className='choice';const button=document.createElement('button');button.type='button';button.className=`issue${currentCheck.state==='issue'?' selected':''}`;button.textContent=currentCheck.state==='issue'?'Issue recorded':'Issue';button.setAttribute('aria-pressed',String(currentCheck.state==='issue'));button.onclick=()=>{row.checks[field.key]={state:'issue',note:currentCheck.note||''};renderChecks(row);saveSession();showLine(current);};choice.append(button);line.append(label,state,choice);if(currentCheck.state==='issue'){const note=document.createElement('input');note.className='note';note.maxLength=180;note.placeholder=`What is wrong with ${field.label.toLowerCase()}? Required`;note.value=currentCheck.note||'';note.setAttribute('aria-label',`${field.label} discrepancy`);note.oninput=()=>{row.checks[field.key].note=note.value;saveSession();};line.append(note);}holder.append(line);});}
-    function goNextIncomplete(){saveSession();for(let offset=1;offset<=session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});}
+    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
+    function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};session.rows.forEach(row=>{if(typeof row.matched!=='boolean'){const checks=row.checks||{};row.matched=LEGACY_FIELD_KEYS.every(key=>checks[key]?.state==='match');const oldNotes=LEGACY_FIELD_KEYS.map(key=>checks[key]?.state==='issue'&&checks[key]?.note?checks[key].note:'').filter(Boolean);if(!row.comment&&oldNotes.length)row.comment=oldNotes.join(' | ');}if(typeof row.comment!=='string')row.comment='';});current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
+    function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
+    function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const comments=session.rows.filter(row=>String(row.comment||'').trim()).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=comments;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=comments?`${comments} line${comments===1?' has':'s have'} comments. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
+    function isComplete(row){return row.matched===true&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
+    function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);$('lineComment').value=row.comment||'';const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('dcPrevBtn').disabled=current===0;$('dcNextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?'CHECKED':'NOT CHECKED';$('matchAllBtn').textContent=row.matched?'✓ All details matched':'✓ Match all details';updateSummary();}
+    function matchAllDetails(){if(!session)return;session.rows[current].matched=true;saveSession();showLine(current);}
+    function goNextIncomplete(){saveSession();for(let offset=1;offset<session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}if(isComplete(session.rows[current]))$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});else $('lineStatus').textContent='This is the only unchecked line';}
     function speakCurrent(){if(!session)return;if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const row=session.rows[current];const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location ${row.location||'not set'}. Lot number ${row.lot||'not set'}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.9;speechSynthesis.speak(utterance);}
     function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
-    async function exportAudit(){if(!session)return;if(typeof ExcelJS==='undefined'){alert('The Excel report component did not load. Connect to the internet and reload this app to export.');return;}const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Double Check Audit');const method=session.checkerIdentity?.method||'name',identity=session.checkerIdentity?.display||session.checker||'';ws.addRow(['HMC Double Check Audit']);ws.mergeCells('A1:O1');ws.getRow(1).font={bold:true,size:16,color:{argb:'FF172554'}};ws.addRow(['Source report',session.fileName]);ws.addRow(['Imported',new Date(session.importedAt).toLocaleString()]);ws.addRow(['Checked By',identity]);ws.addRow(['Identification method',method==='signature'?'Drawn signature':method==='initials'?'Initials':'Name']);ws.addRow(['Exported',new Date().toLocaleString()]);ws.addRow(['Overall notes',session.notes||'']);if(session.checkerIdentity?.signatureData){const imageRow=ws.addRow(['Checker signature']);imageRow.height=44;const imageId=wb.addImage({base64:session.checkerIdentity.signatureData,extension:'png'});ws.addImage(imageId,{tl:{col:1,row:imageRow.number-1},ext:{width:160,height:40}});}ws.addRow([]);const header=ws.addRow(['Item code','Description','Location','Lot / Serial','Expiry','Report quantity','Report status','Report status check','Item code check','Location check','Lot check','Expiry check','Quantity check','Discrepancy notes','Original report row']);header.font={bold:true,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF172554'}};const data=session.rows.map(row=>{const state=k=>row.checks[k]?.state==='match'?'MATCH':row.checks[k]?.state==='issue'?'ISSUE':'NOT CHECKED';const notes=FIELDS.filter(f=>row.checks[f.key]?.state==='issue').map(f=>`${f.label}: ${row.checks[f.key].note}`).join(' | ');return[row.code,row.name,row.location,row.lot,row.expiry,row.qty,row.reportStatus,state('status'),state('code'),state('location'),state('lot'),state('expiry'),state('qty'),notes,row.sourceRow];});data.forEach(values=>ws.addRow(values));ws.columns=[{width:18},{width:40},{width:18},{width:22},{width:16},{width:16},{width:16},{width:16},{width:16},{width:14},{width:14},{width:14},{width:16},{width:55},{width:18}];ws.views=[{state:'frozen',ySplit:header.number}];const buffer=await wb.xlsx.writeBuffer();const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`HMC_Double_Check_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    async function exportAudit(){if(!session)return;if(typeof ExcelJS==='undefined'){alert('The Excel report component did not load. Connect to the internet and reload this app to export.');return;}const wb=new ExcelJS.Workbook();const ws=wb.addWorksheet('Double Check Audit');const method=session.checkerIdentity?.method||'name',identity=session.checkerIdentity?.display||session.checker||'';ws.addRow(['HMC Double Check Audit']);ws.mergeCells('A1:I1');ws.getRow(1).font={bold:true,size:16,color:{argb:'FF172554'}};ws.addRow(['Source report',session.fileName]);ws.addRow(['Imported',new Date(session.importedAt).toLocaleString()]);ws.addRow(['Checked By',identity]);ws.addRow(['Identification method',method==='signature'?'Drawn signature':method==='initials'?'Initials':'Name']);ws.addRow(['Exported',new Date().toLocaleString()]);ws.addRow(['Overall notes',session.notes||'']);if(session.checkerIdentity?.signatureData){const imageRow=ws.addRow(['Checker signature']);imageRow.height=44;const imageId=wb.addImage({base64:session.checkerIdentity.signatureData,extension:'png'});ws.addImage(imageId,{tl:{col:1,row:imageRow.number-1},ext:{width:160,height:40}});}ws.addRow([]);const header=ws.addRow(['Item code','Description','Location','Lot / Serial','Expiry','Report quantity','Report status','Double check','Comments']);header.font={bold:true,color:{argb:'FFFFFFFF'}};header.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF172554'}};session.rows.forEach(row=>ws.addRow([row.code,row.name,row.location,row.lot,row.expiry,row.qty,row.reportStatus,row.matched?'MATCHED':'NOT MATCHED',row.comment||'']));ws.columns=[{width:18},{width:40},{width:18},{width:22},{width:16},{width:16},{width:16},{width:18},{width:55}];ws.views=[{state:'frozen',ySplit:header.number}];const buffer=await wb.xlsx.writeBuffer();const blob=new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`HMC_Double_Check_${new Date().toISOString().slice(0,10)}.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
     restoreSession();
   })();
 </script>
