@@ -3433,17 +3433,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       // Apply Explicit Column Widths requested by user
-      const specifiedWidths = [11, 37, 5, 16, 16, 11, 19, 16, 28];
-      for (let c = 1; c <= 9; c++) {
+      const specifiedWidths = [11, 37, 5, 16, 16, 11, 19, 16, 28, 12];
+      for (let c = 1; c <= 10; c++) {
         worksheet.getColumn(c).width = specifiedWidths[c - 1];
       }
 
-      // Ensure explicit gridlines and apply complete thin borders to ALL cells across all rows (Columns 1 to 9)
+      // Ensure explicit gridlines and apply complete thin borders to ALL cells across all rows (Columns 1 to 10)
       worksheet.views = [{ showGridLines: true }];
 
       for (let r = 1; r <= worksheet.rowCount; r++) {
         const row = worksheet.getRow(r);
-        for (let c = 1; c <= 9; c++) {
+        for (let c = 1; c <= 10; c++) {
           const cell = row.getCell(c);
           if (c === 2) {
             cell.alignment = Object.assign({}, cell.alignment || {}, { wrapText: true });
@@ -3538,6 +3538,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         signatureRow.getCell(4).font = { name: 'Calibri', size: 10, bold: true };
         const signatureImageId = workbook.addImage({ base64: pickedByIdentity.signatureData, extension: 'png' });
         worksheet.addImage(signatureImageId, { tl: { col: 2, row: signatureRow.number - 1 }, ext: { width: 150, height: 38 } });
+      }
+
+      // Extend the remarks column across I:J for the table header and each pick row, starting at row 6.
+      const lastPickReportRow = tableHeaderRowIndex + pickList.length - 1;
+      for (let r = 6; r <= lastPickReportRow; r++) {
+        try {
+          worksheet.mergeCells(r, 9, r, 10);
+        } catch (e) {
+          // Keep generation resilient if an uploaded template already merged this row.
+        }
       }
 
       // Generate & Download Excel File
