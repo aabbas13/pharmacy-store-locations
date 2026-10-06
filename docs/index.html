@@ -3143,7 +3143,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       // Top Header Rows Preserved
       if (rawHeaderMatrix && rawHeaderMatrix.length > 0) {
         rawHeaderMatrix.forEach(row => {
-          const addedRow = worksheet.addRow(row);
+          // Remove any stale literal page counters copied from the source slip;
+          // Excel prints the live Page X of Y value in the repeating page header.
+          const titleRow = row.map(value => typeof value === 'string'
+            ? value.replace(/\bpage\s*\d+\s*of\s*\d+\b/gi, '').trim()
+            : value);
+          const addedRow = worksheet.addRow(titleRow);
           addedRow.height = 20;
           addedRow.eachCell({ includeEmpty: true }, (cell) => {
             cell.alignment = { vertical: "middle" };
@@ -3509,6 +3514,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
 
       const reportHasFooter = Array.isArray(irFooterRow) && irFooterRow.length > 0;
+      const pageNumberHeader = '&RPage &P of &N';
+      worksheet.headerFooter.differentFirst = false;
+      worksheet.headerFooter.differentOddEven = false;
+      worksheet.headerFooter.oddHeader = pageNumberHeader;
+      worksheet.headerFooter.evenHeader = pageNumberHeader;
+      worksheet.headerFooter.firstHeader = pageNumberHeader;
       if (irFooterRow && irFooterRow.length > 0) {
         const footerThreeParts = irFooterRow.slice(1, 4).map(c => String(c ?? '').replace(/\s+/g, ' ').trim());
         if (pickedByIdentity?.display) footerThreeParts[1] = `Picked By: ${pickedByIdentity.display}`;
@@ -3558,56 +3569,55 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       let buffer = await workbook.xlsx.writeBuffer();
 
-      // Enforce the footer in xl/worksheets/sheet1.xml. Excel's Page Setup
-      // dialog reads this XML, so this guarantees that Custom Footer is
-      // populated even if the ExcelJS serializer omits headerFooter.
-      if (irFooterRow && irFooterRow.length > 0) {
-        if (typeof JSZip === 'undefined') {
-          throw new Error('Embedded JSZip failed to load; XLSX footer cannot be safely generated.');
-        }
+      // Enforce dynamic print page numbering and, when present, the custom footer
+      // in the worksheet XML because Excel's Page Setup reads these fields.
+      if (typeof JSZip === 'undefined') {
+        throw new Error('Embedded JSZip failed to load; print headers and footers cannot be safely generated.');
+      }
+      let footerCode = '';
+      if (reportHasFooter) {
         const footerThreeParts = irFooterRow.slice(1, 4).map(c => String(c ?? '').replace(/\s+/g, ' ').trim());
         if (pickedByIdentity?.display) footerThreeParts[1] = `Picked By: ${pickedByIdentity.display}`;
         const footerGap = '                                                            '; // 60 spaces between the three left-aligned footer fields.
-        const footerCode = `&L${footerThreeParts[0] || ''}${footerGap}${footerThreeParts[1] || ''}${footerGap}${footerThreeParts[2] || ''}`;
-        const escapeXml = value => String(value)
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')
-          .replace(/"/g, '&quot;')
-          .replace(/'/g, '&apos;');
-        const footerXmlText = escapeXml(footerCode);
-        const headerFooterXml =
-          `<headerFooter differentFirst="0" differentOddEven="0">` +
-          `<oddFooter>${footerXmlText}</oddFooter>` +
-          `<evenFooter>${footerXmlText}</evenFooter>` +
-          `<firstFooter>${footerXmlText}</firstFooter>` +
-          `</headerFooter>`;
-
-        const zip = await JSZip.loadAsync(buffer);
-        const sheetPath = 'xl/worksheets/sheet1.xml';
-        const sheetEntry = zip.file(sheetPath);
-        if (!sheetEntry) throw new Error('Could not find xl/worksheets/sheet1.xml in exported workbook.');
-        let sheetXml = await sheetEntry.async('string');
-
-        // Remove any existing footer first. Then insert it in the correct
-        // OOXML worksheet order: pageMargins -> pageSetup -> headerFooter.
-        sheetXml = sheetXml.replace(/<headerFooter\b[\s\S]*?<\/headerFooter>/g, '');
-
-        if (/<pageSetup\b[^>]*\/>/.test(sheetXml)) {
-          sheetXml = sheetXml.replace(/(<pageSetup\b[^>]*\/>)/, `$1${headerFooterXml}`);
-        } else if (/<pageMargins\b[^>]*\/>/.test(sheetXml)) {
-          sheetXml = sheetXml.replace(/(<pageMargins\b[^>]*\/>)/, `$1${headerFooterXml}`);
-        } else {
-          sheetXml = sheetXml.replace(/<\/worksheet>/, `${headerFooterXml}</worksheet>`);
-        }
-
-        if (!/<headerFooter\b/.test(sheetXml)) {
-          throw new Error('Footer XML insertion failed; the generated worksheet did not receive <headerFooter>.');
-        }
-
-        zip.file(sheetPath, sheetXml);
-        buffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+        footerCode = `&L${footerThreeParts[0] || ''}${footerGap}${footerThreeParts[1] || ''}${footerGap}${footerThreeParts[2] || ''}`;
       }
+      const escapeXml = value => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+      const headerFooterXml =
+        `<headerFooter differentFirst="0" differentOddEven="0">` +
+        `<oddHeader>${escapeXml(pageNumberHeader)}</oddHeader>` +
+        `<evenHeader>${escapeXml(pageNumberHeader)}</evenHeader>` +
+        `<firstHeader>${escapeXml(pageNumberHeader)}</firstHeader>` +
+        (reportHasFooter
+          ? `<oddFooter>${escapeXml(footerCode)}</oddFooter><evenFooter>${escapeXml(footerCode)}</evenFooter><firstFooter>${escapeXml(footerCode)}</firstFooter>`
+          : '') +
+        `</headerFooter>`;
+
+      const zip = await JSZip.loadAsync(buffer);
+      const sheetPath = 'xl/worksheets/sheet1.xml';
+      const sheetEntry = zip.file(sheetPath);
+      if (!sheetEntry) throw new Error('Could not find xl/worksheets/sheet1.xml in exported workbook.');
+      let sheetXml = await sheetEntry.async('string');
+
+      // Replace any existing header/footer, then insert in worksheet XML order.
+      sheetXml = sheetXml.replace(/<headerFooter\b[\s\S]*?<\/headerFooter>/g, '');
+      if (/<pageSetup\b[^>]*\/>/.test(sheetXml)) {
+        sheetXml = sheetXml.replace(/(<pageSetup\b[^>]*\/>)/, `$1${headerFooterXml}`);
+      } else if (/<pageMargins\b[^>]*\/>/.test(sheetXml)) {
+        sheetXml = sheetXml.replace(/(<pageMargins\b[^>]*\/>)/, `$1${headerFooterXml}`);
+      } else {
+        sheetXml = sheetXml.replace(/<\/worksheet>/, `${headerFooterXml}</worksheet>`);
+      }
+      if (!/<headerFooter\b/.test(sheetXml)) {
+        throw new Error('Page numbering could not be inserted into the generated worksheet.');
+      }
+
+      zip.file(sheetPath, sheetXml);
+      buffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
 
       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = window.URL.createObjectURL(blob);
