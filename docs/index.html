@@ -3250,7 +3250,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         let remarks = item.comment || "";
         if (item.pickedPlacement) {
-          remarks = remarks ? `${remarks} | Placement: ${item.pickedPlacement}` : `Placement: ${item.pickedPlacement}`;
+          remarks = remarks ? `${remarks} | ${item.pickedPlacement}` : item.pickedPlacement;
         }
         if (nearExp) {
           remarks = remarks ? `Near Expiry | ${remarks}` : "Near Expiry";
