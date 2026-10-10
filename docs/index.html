@@ -447,6 +447,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button id="savePkgBtn" class="save-pkg-btn" onclick="saveCurrentItemPackaging()" disabled>💾 Save Packaging Data</button>
         </div>
       </div>
+      <label for="fridgeRemarks">Fridge Remarks</label>
+      <textarea id="fridgeRemarks" rows="2" placeholder="Enter fridge or cold-chain handling remarks" disabled></textarea>
       <label>Calculated Breakdown</label>
       <div class="grid-4">
         <div class="calc-box"><div class="calc-val" id="resCartons">0</div><div class="calc-lbl">Cartons</div></div>
@@ -473,7 +475,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
     </div>
     <div class="picker-nav-stack">
-      <div class="nav-buttons"><button id="pickerNextPendingBtn" type="button" class="secondary" onclick="navigateNextPending()">Next Pending</button><button id="pickerPrevPendingBtn" type="button" class="secondary" onclick="navigatePreviousPending()">Previous Pending</button></div>
+      <div class="nav-buttons"><button id="pickerPrevPendingBtn" type="button" class="secondary" onclick="navigatePreviousPending()">Previous Pending</button><button id="pickerNextPendingBtn" type="button" class="secondary" onclick="navigateNextPending()">Next Pending</button></div>
       <div class="nav-buttons"><button id="pickerPreviousItemBtn" type="button" class="secondary" onclick="navigateStep(-1)">← Previous Item</button><button id="pickerNextItemBtn" type="button" class="secondary" onclick="navigateStep(1)">Next Item →</button></div>
     </div>
 
@@ -1807,7 +1809,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               packSize: parseInt(r['Pack Size (Units/Pk)'] || r['Pack Size'] || r['Pack'] || 0) || 0,
               cartonSize: parseInt(r['Carton Size (Pks/Ctn)'] || r['Carton Size'] || r['Carton'] || 0) || 0,
               catchSize: parseInt(r['Catch Size (Pks/Ctch)'] || r['Catch Size'] || r['Catch'] || 0) || 0,
-              stripSize: parseInt(r['Strip Size (Units/Strip)'] || r['Strip Size'] || r['Strip'] || 1) || 1
+              stripSize: parseInt(r['Strip Size (Units/Strip)'] || r['Strip Size'] || r['Strip'] || 1) || 1,
+              fridgeRemarks: String(r['Fridge Remarks'] || r['Fridge Remark'] || '').trim()
             };
             packagingDb[parentLot ? packageConfigKey(itemCodeStr, name, parentLot) : itemCodeStr] = config;
             count++;
@@ -2370,7 +2373,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function updateLotUIState() {
       const item = pickList[currentIndex];
       const btn = document.getElementById('lotConfirmBtn');
-      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment'];
+      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'fridgeRemarks', 'itemComment'];
 
       if (item.lotConfirmed) {
         stopLotSpeech();
@@ -2403,7 +2406,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         packSize: pSize,
         cartonSize: ctnSize,
         catchSize: ctchSize,
-        stripSize: stpSize
+        stripSize: stpSize,
+        fridgeRemarks: document.getElementById('fridgeRemarks').value.trim()
       };
 
       saveSessionState();
@@ -2437,6 +2441,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('itemComment').addEventListener('input', function() {
       const item = pickList[currentIndex];
       item.comment = this.value;
+      saveSessionState();
+    });
+
+    document.getElementById('fridgeRemarks').addEventListener('input', function() {
+      const item = pickList[currentIndex];
+      if (!item) return;
+      const configKey = packageConfigKey(item.code, item.name, item.parentLot);
+      const previous = getPackageConfig(item) || { code: item.code, name: item.name, parentLot: item.parentLot || '' };
+      packagingDb[configKey] = { ...previous, fridgeRemarks: this.value.trim() };
       saveSessionState();
     });
 
@@ -3014,8 +3027,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('cartonSizeInPacks').value = saved.cartonSize || '';
         document.getElementById('catchSizeInPacks').value = saved.catchSize || '';
         document.getElementById('stripSize').value = saved.stripSize || '';
+        document.getElementById('fridgeRemarks').value = saved.fridgeRemarks || '';
       } else {
-        ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize'].forEach(id => {
+        ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'fridgeRemarks'].forEach(id => {
           document.getElementById(id).value = '';
         });
       }
@@ -3572,7 +3586,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const timestamp = getFormattedTimestamp();
       const safeMo = moveOrderNum.replace(/[/\\?%*:|"<>]/g, '-');
       const safeCust = customerName.replace(/[/\\?%*:|"<>]/g, '-');
-      const filename = `${safeMo}_${safeCust}_${timestamp}.xlsx`;
+      const filename = `PK_${safeMo}_${safeCust}_${timestamp}.xlsx`;
 
       let buffer = await workbook.xlsx.writeBuffer();
 
@@ -3723,13 +3737,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         'Pack Size (Units/Pk)': config.packSize || '',
         'Carton Size (Pks/Ctn)': config.cartonSize || '',
         'Catch Size (Pks/Ctch)': config.catchSize || '',
-        'Strip Size (Units/Strip)': config.stripSize || ''
+        'Strip Size (Units/Strip)': config.stripSize || '',
+        'Fridge Remarks': config.fridgeRemarks || ''
       })).sort((a, b) => String(a['Item Number']).localeCompare(String(b['Item Number'])) ||
         String(a['Item Description']).localeCompare(String(b['Item Description'])) ||
         String(a['Parent Lot (Brand)']).localeCompare(String(b['Parent Lot (Brand)'])));
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20}];
+      worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20},{wch:42}];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Location Package Master');
       XLSX.writeFile(workbook, `HMC_Location_Package_Master_${getFormattedTimestamp()}.xlsx`);
@@ -3900,7 +3915,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `HMC_Double_Checked_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        link.download = `DC_HMC_Double_Checked_${new Date().toISOString().slice(0, 10)}.xlsx`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch (error) {
