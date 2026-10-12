@@ -284,7 +284,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button type="button" id="refreshGoogleLocations" style="background:#12665b; color:white;">↻ Refresh Location Master</button>
     <button type="button" class="clear-web-data-btn" onclick="clearAllHelperBrowserData()">Clear Saved Web Data</button>
     <small id="googleLocationStatus" role="status" aria-live="polite" style="font-size:0.8rem; flex:1; min-width:190px;">Checking saved location data…</small>
-    <small style="color:#52645d; font-size:0.72rem; width:100%;">Uses the HMC Google Sheet anonymously; the last successful copy is saved on this device for offline use. Excel import remains available. Clear Saved Web Data removes this helper’s saved sessions and location cache, then reloads the latest app.</small>
+    <small style="color:#52645d; font-size:0.72rem; width:100%;">Uses the HMC Google Sheet anonymously; the last successful copy is saved on this device for offline use. It reads locations from the first tab and package details from a tab named “Location Package Master”. Excel import remains available.</small>
     <small id="sessionPersistenceStatus" role="status" aria-live="polite" style="font-size:0.72rem; width:100%; color:#52645d;">Pick progress saves automatically on this device, keyed by pick-slip cell D2.</small>
   </div>
 
@@ -750,7 +750,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function getPackageConfig(item) {
       if (!item) return null;
-      return packagingDb[packageConfigKey(item.code, item.name, item.parentLot)] || packagingDb[item.code] || null;
+      const exactMatch = packagingDb[packageConfigKey(item.code, item.name, item.parentLot)];
+      if (exactMatch) return exactMatch;
+      const requestedCode = normalizePackagePart(item.code);
+      const requestedParentLot = normalizePackagePart(item.parentLot);
+      if (requestedParentLot) {
+        const parentLotMatch = Object.values(packagingDb).find(config =>
+          normalizePackagePart(config.code) === requestedCode &&
+          normalizePackagePart(config.parentLot) === requestedParentLot
+        );
+        if (parentLotMatch) return parentLotMatch;
+      }
+      return packagingDb[item.code] || null;
     }
     let currentIndex = 0;
     let sessionId = '';
@@ -1593,29 +1604,73 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return rows;
     }
 
-    function locationRowsToRecords(rows) {
+    function locationRowsToMasterData(rows) {
       const normalize = value => String(value ?? '').replace(/^\uFEFF/, '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      let headerRow = -1, codeColumn = -1, locationColumn = -1;
+      let headerRow = -1, headers = [];
       for (let r = 0; r < Math.min(rows.length, 20); r++) {
-        const headers = rows[r].map(normalize);
-        codeColumn = headers.findIndex(value => ['itemcode', 'itemnumber', 'item'].includes(value));
-        locationColumn = headers.findIndex(value => ['location', 'storelocation', 'binlocation', 'bin', 'locator'].includes(value));
-        if (codeColumn >= 0 && locationColumn >= 0) { headerRow = r; break; }
+        const candidate = rows[r].map(normalize);
+        const hasCode = candidate.some(value => ['itemcode', 'itemnumber', 'item'].includes(value));
+        const hasLocation = candidate.some(value => ['location', 'storelocation', 'binlocation', 'bin', 'locator', 'masterlocationitemlevel'].includes(value));
+        if (hasCode && hasLocation) { headerRow = r; headers = candidate; break; }
       }
-      if (headerRow < 0) throw new Error('Could not find Item Code and Location headers in the first 20 rows.');
-      const records = [];
+      if (headerRow < 0) throw new Error('Could not find Item Number/Item Code and Location/Master Location headers in the first 20 rows.');
+      const column = aliases => headers.findIndex(value => aliases.includes(value));
+      const codeColumn = column(['itemcode', 'itemnumber', 'item']);
+      const locationColumn = column(['location', 'storelocation', 'binlocation', 'bin', 'locator', 'masterlocationitemlevel']);
+      const nameColumn = column(['itemdescription', 'description', 'name']);
+      const parentLotColumn = column(['parentlotbrand', 'parentlot', 'parentlotnumber', 'brand']);
+      const packColumn = column(['packsizeunitspk', 'packsize', 'pack']);
+      const cartonColumn = column(['cartonsizepksctn', 'cartonsize', 'carton']);
+      const catchColumn = column(['catchsizepksctch', 'catchsize', 'catch']);
+      const stripColumn = column(['stripsizeunitsstrip', 'stripsize', 'strip']);
+      const fridgeColumn = column(['fridgeremarks', 'fridgeremark']);
+      const records = [], packageRows = new Map();
+      const valueAt = (row, index) => index < 0 ? '' : String(row[index] ?? '').trim();
       for (const row of rows.slice(headerRow + 1)) {
-        const code = String(row[codeColumn] ?? '').trim();
-        const location = String(row[locationColumn] ?? '').trim();
-        if (code && location) records.push({ code, location });
+        const code = valueAt(row, codeColumn);
+        if (!code) continue;
+        const location = valueAt(row, locationColumn);
+        if (location) records.push({ code, location });
+        const name = valueAt(row, nameColumn);
+        const parentLot = valueAt(row, parentLotColumn);
+        if (name && (parentLot || [packColumn, cartonColumn, catchColumn, stripColumn, fridgeColumn].some(index => index >= 0))) {
+          const config = {
+            code, name, parentLot,
+            packSize: parseInt(valueAt(row, packColumn), 10) || 0,
+            cartonSize: parseInt(valueAt(row, cartonColumn), 10) || 0,
+            catchSize: parseInt(valueAt(row, catchColumn), 10) || 0,
+            stripSize: parseInt(valueAt(row, stripColumn), 10) || 1,
+            fridgeRemarks: valueAt(row, fridgeColumn)
+          };
+          const key = packageConfigKey(code, name, parentLot);
+          const previous = packageRows.get(key);
+          if (!previous) packageRows.set(key, config);
+          else {
+            // Repeated source lines can split values across rows; retain populated values.
+            ['packSize', 'cartonSize', 'catchSize', 'fridgeRemarks'].forEach(field => {
+              if (config[field] !== '' && config[field] !== 0) previous[field] = config[field];
+            });
+            if (config.stripSize !== 1) previous.stripSize = config.stripSize;
+          }
+        }
       }
-      if (!records.length) throw new Error('The sheet headers were found, but no Item Code/Location records were returned.');
-      return records;
+      if (!records.length) throw new Error('The sheet headers were found, but no Item Number/Location records were returned.');
+      const headersOriginal = rows[headerRow].map(value => String(value ?? '').replace(/^\uFEFF/, '').trim());
+      return {
+        records,
+        packageConfigs: [...packageRows.values()],
+        hasPackageColumns: nameColumn >= 0 && [packColumn, cartonColumn, catchColumn, stripColumn, fridgeColumn].some(index => index >= 0),
+        headers: headersOriginal,
+        rows: rows.slice(headerRow + 1).map(row => Object.fromEntries(headersOriginal.map((header, i) => [header, row[i] ?? ''])))
+      };
     }
 
-    function locationFingerprint(records) {
+    function locationFingerprint(records, packageConfigs = []) {
       let hash = 0xcbf29ce484222325n;
-      const bytes = new TextEncoder().encode(JSON.stringify(records.map(record => [record.code, record.location])));
+      const bytes = new TextEncoder().encode(JSON.stringify({
+        locations: records.map(record => [record.code, record.location]),
+        packages: packageConfigs.map(config => [config.code, config.name, config.parentLot, config.packSize, config.cartonSize, config.catchSize, config.stripSize, config.fridgeRemarks])
+      }));
       for (const byte of bytes) {
         hash ^= BigInt(byte);
         hash = BigInt.asUintN(64, hash * 0x100000001b3n);
@@ -1636,11 +1691,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return rows;
     }
 
-    async function fetchGoogleLocationRecords() {
-      const gid = '0';
+    async function fetchGoogleTabMasterData({ gid, sheet }) {
+      const selection = sheet ? `sheet=${encodeURIComponent(sheet)}` : `gid=${gid}`;
       const endpoints = [
-        { name: 'CSV', url: `https://docs.google.com/spreadsheets/d/${HMC_LOCATION_SHEET_ID}/export?format=csv&gid=${gid}`, parse: parseLocationCsv },
-        { name: 'gviz', url: `https://docs.google.com/spreadsheets/d/${HMC_LOCATION_SHEET_ID}/gviz/tq?gid=${gid}&tqx=out:json`, parse: parseGvizLocationRows }
+        ...(!sheet ? [{ name: 'CSV', url: `https://docs.google.com/spreadsheets/d/${HMC_LOCATION_SHEET_ID}/export?format=csv&${selection}`, parse: parseLocationCsv }] : []),
+        { name: 'gviz', url: `https://docs.google.com/spreadsheets/d/${HMC_LOCATION_SHEET_ID}/gviz/tq?${selection}&tqx=out:json`, parse: parseGvizLocationRows }
       ];
       const errors = [];
       for (const endpoint of endpoints) {
@@ -1651,12 +1706,39 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           if (/accounts\.google\.com|ServiceLogin|You need access|Sign in to continue/i.test(text.slice(0, 6000))) {
             throw new Error('Google returned a sign-in or access-denied page; the sheet is not anonymously readable.');
           }
-          return { records: locationRowsToRecords(endpoint.parse(text)), endpoint: endpoint.name };
+          return { ...locationRowsToMasterData(endpoint.parse(text)), endpoint: endpoint.name };
         } catch (error) {
           errors.push(`${endpoint.name}: ${error.message || error}`);
         }
       }
       throw new Error(errors.join('\n'));
+    }
+
+    async function fetchGoogleLocationRecords() {
+      const primary = await fetchGoogleTabMasterData({ gid: '0' });
+      // The package workbook belongs in its own tab so updating package data cannot
+      // erase or disturb the existing live Location Master tab.
+      let packageTab = null;
+      try {
+        packageTab = await fetchGoogleTabMasterData({ sheet: 'Location Package Master' });
+        if (!packageTab.hasPackageColumns) throw new Error('The tab exists, but does not contain Item Description and package-size columns.');
+      } catch (error) {
+        packageTab = null;
+        console.info('Optional Location Package Master tab is not available yet:', error.message || error);
+      }
+      const combinedRecords = [...primary.records, ...(packageTab?.records || [])];
+      const configs = new Map();
+      [...primary.packageConfigs, ...(packageTab?.packageConfigs || [])].forEach(config => {
+        configs.set(packageConfigKey(config.code, config.name, config.parentLot), config);
+      });
+      return {
+        records: combinedRecords,
+        packageConfigs: [...configs.values()],
+        rows: primary.rows,
+        headers: primary.headers,
+        endpoint: packageTab ? `${primary.endpoint} + Location Package Master` : primary.endpoint,
+        tab: packageTab ? 'gid=0 + Location Package Master' : 'gid=0'
+      };
     }
 
     function updateGoogleLocationStatus(text, kind) {
@@ -1675,6 +1757,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         if (cached && cached.locationMap && Object.keys(cached.locationMap).length) {
           locationMap = cached.locationMap;
+          if (cached.packagingDb && Object.keys(cached.packagingDb).length) packagingDb = cached.packagingDb;
+          if (cached.rows) locationMasterRows = cached.rows;
+          if (cached.headers) locationMasterHeaders = cached.headers;
+          if (cached.sheetName) locationMasterSheetName = cached.sheetName;
           applyLocationMapToPickList();
           saveSessionState();
           const cachedTime = cached.refreshedAt ? new Date(cached.refreshedAt).toLocaleString() : 'time unknown';
@@ -1706,15 +1792,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         for (const record of result.records) {
           nextMap[record.code] = filterPreferredLocations(record.location);
         }
+        const nextPackagingDb = { ...packagingDb };
+        for (const config of result.packageConfigs) {
+          nextPackagingDb[packageConfigKey(config.code, config.name, config.parentLot)] = config;
+        }
         const saved = {
           locationMap: nextMap,
+          packagingDb: nextPackagingDb,
+          rows: result.rows,
+          headers: result.headers,
           refreshedAt: new Date().toISOString(),
-          fingerprint: locationFingerprint(result.records),
+          fingerprint: locationFingerprint(result.records, result.packageConfigs),
           endpoint: result.endpoint,
-          tab: 'HMC Location Master · gid=0'
+          tab: result.tab || 'HMC Location Master · gid=0'
         };
         await writeLocationCache(saved);
         locationMap = nextMap;
+        packagingDb = nextPackagingDb;
+        locationMasterRows = result.rows;
+        locationMasterHeaders = result.headers;
         applyLocationMapToPickList();
         saveSessionState();
         document.getElementById('locStatus').innerText = `✓ Loaded ${Object.keys(locationMap).length} locations from Google Sheets`;
