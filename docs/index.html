@@ -98,6 +98,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .badge-done { background: #dcfce7; color: var(--success); }
 
     .location-box { background: #eff6ff; border-left: 3px solid #2563eb; padding: 5px 8px; border-radius: 6px; margin: 4px 0 6px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+    .location-box.fridge-location-highlight { background: #e0f2fe; border-left-color: #0284c7; box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.16); }
+    .location-box.fridge-location-highlight .location-title, .location-box.fridge-location-highlight .location-value { color: #0369a1; }
+    .fridge-location-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; background: #bae6fd; color: #075985; font-size: 0.68rem; font-weight: 800; vertical-align: middle; }
+    .fridge-location-badge[hidden] { display: none; }
+    #pickerCard.fridge-item-highlight { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18); }
     .location-title { font-size: 0.62rem; color: #1d4ed8; font-weight: bold; }
     .location-value { font-size: 1.6rem; line-height: 1.15; white-space: pre-line; font-weight: 750; color: #1d4ed8; letter-spacing: 0.25px; overflow-wrap: anywhere; }
     .btn-edit-loc { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; padding: 3px 6px; border-radius: 6px; font-size: 0.62rem; font-weight: bold; cursor: pointer; }
@@ -205,6 +210,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     tr:nth-child(even) { background-color: #f8fafc; }
     tr.selected-row { background-color: #e0f2fe !important; font-weight: bold; }
     tr.picked-row, tr.picked-row.selected-row { background-color: #dcfce7 !important; }
+    tr.fridge-location-row td, tr.fridge-location-row.picked-row td { background: #e0f2fe !important; color: #075985; }
+    tr.fridge-location-row td:first-child { border-left: 4px solid #0ea5e9; }
     .picker-nav-stack { display:grid; gap:6px; margin:8px 0 12px; }
     .picker-nav-stack .nav-buttons { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
     .picker-nav-stack button { min-width:0; padding:9px 6px; font-size:.82rem; }
@@ -404,9 +411,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div class="item-name" id="itemNameDisplay">--</div>
 
-    <div class="location-box">
+    <div class="location-box" id="locationBox">
       <div>
-        <div class="location-title">SHELF LOCATION</div>
+        <div class="location-title">SHELF LOCATION <span id="fridgeLocationBadge" class="fridge-location-badge" hidden>FRIDGE</span></div>
         <div class="location-value" id="locDisplay">--</div>
       </div>
       <button class="btn-edit-loc" onclick="openLocationEditModal()">✏️ Edit</button>
@@ -447,8 +454,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button id="savePkgBtn" class="save-pkg-btn" onclick="saveCurrentItemPackaging()" disabled>💾 Save Packaging Data</button>
         </div>
       </div>
-      <label for="fridgeRemarks">Fridge Remarks</label>
-      <textarea id="fridgeRemarks" rows="2" placeholder="Enter fridge or cold-chain handling remarks" disabled></textarea>
       <label>Calculated Breakdown</label>
       <div class="grid-4">
         <div class="calc-box"><div class="calc-val" id="resCartons">0</div><div class="calc-lbl">Cartons</div></div>
@@ -964,6 +969,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
 
+    async function deleteSavedSessionFromList(identifier) {
+      const normalizedIdentifier = normalizedSessionKey(identifier);
+      if (!normalizedIdentifier) return;
+      if (normalizedIdentifier === normalizedSessionKey(sessionId)) {
+        // Clearing the active session also removes its in-tab copy so pagehide
+        // cannot silently save the deleted session again.
+        await clearSessionAndReset();
+        return;
+      }
+      if (!confirm(`Delete the saved picking session with D2 identifier ${identifier}? This cannot be undone.`)) return;
+      try {
+        await deletePersistentSession(identifier);
+        await renderSavedSessionsList();
+      } catch (error) {
+        alert(`Could not delete saved session ${identifier}: ${error.message || error}`);
+      }
+    }
+
     async function renderSavedSessionsList() {
       const host = document.getElementById('savedSessionsList');
       if (!host) return;
@@ -990,7 +1013,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           resume.className = 'header-btn';
           resume.textContent = 'Resume';
           resume.addEventListener('click', () => resumePersistentSession(saved.sessionId));
-          card.append(info, resume);
+          const actions = document.createElement('div');
+          actions.style.cssText = 'display:flex;align-items:center;gap:6px;';
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.textContent = '×';
+          remove.setAttribute('aria-label', `Delete saved session ${saved.sessionId || 'with unknown identifier'}`);
+          remove.title = 'Delete this saved session';
+          remove.style.cssText = 'width:36px;height:36px;padding:0;border:0;border-radius:50%;background:#fee2e2;color:#b91c1c;font-size:1.45rem;font-weight:700;line-height:1;';
+          remove.addEventListener('click', () => deleteSavedSessionFromList(saved.sessionId));
+          actions.append(resume, remove);
+          card.append(info, actions);
           host.append(card);
         }
       } catch (error) {
@@ -1623,7 +1656,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const cartonColumn = column(['cartonsizepksctn', 'cartonsize', 'carton']);
       const catchColumn = column(['catchsizepksctch', 'catchsize', 'catch']);
       const stripColumn = column(['stripsizeunitsstrip', 'stripsize', 'strip']);
-      const fridgeColumn = column(['fridgeremarks', 'fridgeremark']);
+      const packageColumns = [packColumn, cartonColumn, catchColumn, stripColumn];
       const records = [], packageRows = new Map();
       const valueAt = (row, index) => index < 0 ? '' : String(row[index] ?? '').trim();
       for (const row of rows.slice(headerRow + 1)) {
@@ -1633,21 +1666,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (location) records.push({ code, location });
         const name = valueAt(row, nameColumn);
         const parentLot = valueAt(row, parentLotColumn);
-        if (name && (parentLot || [packColumn, cartonColumn, catchColumn, stripColumn, fridgeColumn].some(index => index >= 0))) {
+        if (name && (parentLot || packageColumns.some(index => index >= 0))) {
           const config = {
             code, name, parentLot,
             packSize: parseInt(valueAt(row, packColumn), 10) || 0,
             cartonSize: parseInt(valueAt(row, cartonColumn), 10) || 0,
             catchSize: parseInt(valueAt(row, catchColumn), 10) || 0,
-            stripSize: parseInt(valueAt(row, stripColumn), 10) || 1,
-            fridgeRemarks: valueAt(row, fridgeColumn)
+            stripSize: parseInt(valueAt(row, stripColumn), 10) || 1
           };
           const key = packageConfigKey(code, name, parentLot);
           const previous = packageRows.get(key);
           if (!previous) packageRows.set(key, config);
           else {
             // Repeated source lines can split values across rows; retain populated values.
-            ['packSize', 'cartonSize', 'catchSize', 'fridgeRemarks'].forEach(field => {
+            ['packSize', 'cartonSize', 'catchSize'].forEach(field => {
               if (config[field] !== '' && config[field] !== 0) previous[field] = config[field];
             });
             if (config.stripSize !== 1) previous.stripSize = config.stripSize;
@@ -1659,7 +1691,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return {
         records,
         packageConfigs: [...packageRows.values()],
-        hasPackageColumns: nameColumn >= 0 && [packColumn, cartonColumn, catchColumn, stripColumn, fridgeColumn].some(index => index >= 0),
+        hasPackageColumns: nameColumn >= 0 && packageColumns.some(index => index >= 0),
         headers: headersOriginal,
         rows: rows.slice(headerRow + 1).map(row => Object.fromEntries(headersOriginal.map((header, i) => [header, row[i] ?? ''])))
       };
@@ -1669,7 +1701,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       let hash = 0xcbf29ce484222325n;
       const bytes = new TextEncoder().encode(JSON.stringify({
         locations: records.map(record => [record.code, record.location]),
-        packages: packageConfigs.map(config => [config.code, config.name, config.parentLot, config.packSize, config.cartonSize, config.catchSize, config.stripSize, config.fridgeRemarks])
+        packages: packageConfigs.map(config => [config.code, config.name, config.parentLot, config.packSize, config.cartonSize, config.catchSize, config.stripSize])
       }));
       for (const byte of bytes) {
         hash ^= BigInt(byte);
@@ -1905,8 +1937,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               packSize: parseInt(r['Pack Size (Units/Pk)'] || r['Pack Size'] || r['Pack'] || 0) || 0,
               cartonSize: parseInt(r['Carton Size (Pks/Ctn)'] || r['Carton Size'] || r['Carton'] || 0) || 0,
               catchSize: parseInt(r['Catch Size (Pks/Ctch)'] || r['Catch Size'] || r['Catch'] || 0) || 0,
-              stripSize: parseInt(r['Strip Size (Units/Strip)'] || r['Strip Size'] || r['Strip'] || 1) || 1,
-              fridgeRemarks: String(r['Fridge Remarks'] || r['Fridge Remark'] || '').trim()
+              stripSize: parseInt(r['Strip Size (Units/Strip)'] || r['Strip Size'] || r['Strip'] || 1) || 1
             };
             packagingDb[parentLot ? packageConfigKey(itemCodeStr, name, parentLot) : itemCodeStr] = config;
             count++;
@@ -2469,7 +2500,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function updateLotUIState() {
       const item = pickList[currentIndex];
       const btn = document.getElementById('lotConfirmBtn');
-      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'fridgeRemarks', 'itemComment'];
+      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment'];
 
       if (item.lotConfirmed) {
         stopLotSpeech();
@@ -2502,8 +2533,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         packSize: pSize,
         cartonSize: ctnSize,
         catchSize: ctchSize,
-        stripSize: stpSize,
-        fridgeRemarks: document.getElementById('fridgeRemarks').value.trim()
+        stripSize: stpSize
       };
 
       saveSessionState();
@@ -2540,15 +2570,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
     });
 
-    document.getElementById('fridgeRemarks').addEventListener('input', function() {
-      const item = pickList[currentIndex];
-      if (!item) return;
-      const configKey = packageConfigKey(item.code, item.name, item.parentLot);
-      const previous = getPackageConfig(item) || { code: item.code, name: item.name, parentLot: item.parentLot || '' };
-      packagingDb[configKey] = { ...previous, fridgeRemarks: this.value.trim() };
-      saveSessionState();
-    });
-
     function cleanPlacementValue(value) {
       return String(value ?? '').toUpperCase().slice(0, 4);
     }
@@ -2572,7 +2593,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('pickConfirmQuantity').textContent = `${document.getElementById('pickedQtyInput').value || 0} ${item.uom || ''}`.trim();
       document.getElementById('pickConfirmPackaging').textContent = `${describeCurrentPackaging()}. Breakdown: ${document.getElementById('resCartons').textContent} cartons, ${document.getElementById('resCatches').textContent} catches, ${document.getElementById('resPacks').textContent} packs, ${document.getElementById('resStrips').textContent} strips.`;
       document.getElementById('pickConfirmIdentity').textContent = pickedByIdentity?.display || '—';
-      document.getElementById('pickConfirmRemarks').textContent = document.getElementById('itemComment').value.trim() || 'None';
+      document.getElementById('pickConfirmRemarks').textContent = getItemReportComment(item) || 'None';
       document.getElementById('pickConfirmPlacement').value = cleanPlacementValue(item.itemPicked && item.pickedPlacement !== undefined ? item.pickedPlacement : pickedPlacementLocation);
       document.getElementById('pickConfirmModal').style.display = 'flex';
     }
@@ -3091,6 +3112,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return /generic/i.test(description);
     }
 
+    function isFridgeLocation(item) {
+      return /^CR/i.test(String(item?.location ?? '').trim());
+    }
+
+    function getItemReportComment(item) {
+      const note = String(item?.comment ?? '').trim();
+      const hasFridgeTag = note.split(/[|;,]/).some(part => part.trim().toLowerCase() === 'fridge');
+      const parts = [];
+      if (isFridgeLocation(item) && !hasFridgeTag) parts.push('Fridge');
+      if (note) parts.push(note);
+      return parts.join(' | ');
+    }
+
     function renderCurrentItem() {
       const item = pickList[currentIndex];
 
@@ -3101,6 +3135,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('pickedQtyInput').disabled = true;
       document.getElementById('itemComment').value = item.comment || "";
       document.getElementById('locDisplay').innerText = item.location;
+      const fridgeLocation = isFridgeLocation(item);
+      document.getElementById('locationBox').classList.toggle('fridge-location-highlight', fridgeLocation);
+      document.getElementById('fridgeLocationBadge').hidden = !fridgeLocation;
+      document.getElementById('pickerCard').classList.toggle('fridge-item-highlight', fridgeLocation);
       document.getElementById('itemCodeDisplay').innerText = `ITEM: ${item.code}`;
       const itemNameDisplay = document.getElementById('itemNameDisplay');
       itemNameDisplay.innerText = item.name;
@@ -3123,9 +3161,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('cartonSizeInPacks').value = saved.cartonSize || '';
         document.getElementById('catchSizeInPacks').value = saved.catchSize || '';
         document.getElementById('stripSize').value = saved.stripSize || '';
-        document.getElementById('fridgeRemarks').value = saved.fridgeRemarks || '';
       } else {
-        ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'fridgeRemarks'].forEach(id => {
+        ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize'].forEach(id => {
           document.getElementById(id).value = '';
         });
       }
@@ -3154,6 +3191,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (idx === currentIndex) tr.classList.add('selected-row');
         if (item.itemPicked) tr.classList.add('picked-row');
         if (isGenericItem(item)) tr.classList.add('generic-item-row');
+        if (isFridgeLocation(item)) tr.classList.add('fridge-location-row');
         tr.style.cursor = 'pointer';
         tr.onclick = () => jumpToItem(idx);
 
@@ -3358,7 +3396,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const nearExp = isNearExpiry(item.expiry);
         const isGeneric = isGenericItem(item);
 
-        let remarks = item.comment || "";
+        let remarks = getItemReportComment(item);
         if (item.pickedPlacement) {
           remarks = remarks ? `${remarks} | ${item.pickedPlacement}` : item.pickedPlacement;
         }
@@ -3833,14 +3871,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         'Pack Size (Units/Pk)': config.packSize || '',
         'Carton Size (Pks/Ctn)': config.cartonSize || '',
         'Catch Size (Pks/Ctch)': config.catchSize || '',
-        'Strip Size (Units/Strip)': config.stripSize || '',
-        'Fridge Remarks': config.fridgeRemarks || ''
+        'Strip Size (Units/Strip)': config.stripSize || ''
       })).sort((a, b) => String(a['Item Number']).localeCompare(String(b['Item Number'])) ||
         String(a['Item Description']).localeCompare(String(b['Item Description'])) ||
         String(a['Parent Lot (Brand)']).localeCompare(String(b['Parent Lot (Brand)'])));
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
-      worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20},{wch:42}];
+      worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20}];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Location Package Master');
       XLSX.writeFile(workbook, `HMC_Location_Package_Master_${getFormattedTimestamp()}.xlsx`);
