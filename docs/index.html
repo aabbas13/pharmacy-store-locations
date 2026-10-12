@@ -687,9 +687,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <div id="itemSearchApp" class="item-search-view hidden">
     <section class="item-search-panel">
       <h1 style="font-size:1.25rem">Search the shared Location &amp; Package Master</h1>
-      <p class="item-search-hint">Enter the last four digits of an item number. Matching results include the item's location, brand/parent lot, and saved package details. Search uses the latest sheet copy available on this device.</p>
+      <p class="item-search-hint">Search by item number, item description, or parent lot / brand. Entering four digits still searches the end of the item number. Results include location and saved package details.</p>
       <form id="itemSearchForm" class="item-search-form">
-        <input id="itemSearchDigits" type="text" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" aria-label="Last four digits of item number" placeholder="4 digits" required>
+        <input id="itemSearchDigits" type="search" inputmode="search" autocomplete="off" maxlength="120" aria-label="Search item number, description, or parent lot" placeholder="Item number, description, or parent lot" required>
         <button type="submit">Search Items</button>
       </form>
       <div id="itemSearchStatus" role="status" aria-live="polite">Loading shared-sheet search data…</div>
@@ -888,23 +888,35 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       window.open(`${HMC_UPDATE_FORM_URL}?${query.toString()}`, '_blank', 'noopener');
     }
 
-    function searchItemsBySuffix(rawDigits, speakUnique = true) {
-      const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 4);
+    function searchItemsBySuffix(rawQuery, speakUnique = true) {
+      const query = String(rawQuery ?? '').trim();
       const status = document.getElementById('itemSearchStatus');
       const results = document.getElementById('itemSearchResults');
-      if (digits.length !== 4) {
+      if (!query) {
         results.replaceChildren();
-        status.textContent = 'Enter exactly four digits to search.';
+        status.textContent = 'Enter an item number, description, or parent lot to search.';
         return;
       }
       itemSearchCatalog = buildItemSearchCatalog();
-      const matches = itemSearchCatalog.filter(item => String(item.code).replace(/\D/g, '').endsWith(digits));
+      const queryKey = query.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+      const suffixSearch = /^\d{4}$/.test(query);
+      const suffixMatches = suffixSearch
+        ? itemSearchCatalog.filter(item => String(item.code).replace(/\D/g, '').endsWith(query))
+        : [];
+      const broadMatches = itemSearchCatalog.filter(item => {
+        const code = String(item.code ?? '').toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+        const description = String(item.name ?? '').toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+        const parentLot = String(item.parentLot ?? '').toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+        return queryKey && (code.includes(queryKey) || description.includes(queryKey) || parentLot.includes(queryKey));
+      });
+      const suffixKeys = new Set(suffixMatches.map(item => packageConfigKey(item.code, item.name, item.parentLot)));
+      const matches = [...suffixMatches, ...broadMatches.filter(item => !suffixKeys.has(packageConfigKey(item.code, item.name, item.parentLot)))];
       if (!matches.length) {
-        status.textContent = `No item numbers end in ${digits}. ${itemSearchCatalog.length ? 'Check the digits or refresh the shared sheet.' : 'No shared-sheet data is cached on this device yet; connect and refresh the Location Master.'}`;
+        status.textContent = `No items match “${query}”. ${itemSearchCatalog.length ? 'Check the spelling or refresh the shared sheet.' : 'No shared-sheet data is cached on this device yet; connect and refresh the Location Master.'}`;
         results.replaceChildren();
         return;
       }
-      status.textContent = `${matches.length} matching ${matches.length === 1 ? 'item' : 'items'} found${locationSearchRows.length ? ' in the shared-sheet data' : ' from saved app data'}.`;
+      status.textContent = `${matches.length} matching ${matches.length === 1 ? 'item' : 'items'} for “${query}”${locationSearchRows.length ? ' in the shared-sheet data' : ' from saved app data'}${suffixMatches.length ? ' · item-number suffix matches shown first' : ''}.`;
       results.innerHTML = matches.map((item, index) => {
         const pkg = item.package || {};
         const facts = [
@@ -914,11 +926,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         ].filter(([label, value]) => value !== undefined && value !== null && String(value).trim() !== '' && !(label.startsWith('Strip') && Number(value) === 1));
         return `<article class="item-search-result"><div class="item-search-code">${searchText(item.code)}</div><div class="item-search-description">${searchText(item.name || 'Description not provided')}</div><div class="item-search-facts">${facts.length ? facts.map(([label, value]) => `<div class="item-search-fact"><span>${searchText(label)}</span><b>${searchText(value)}</b></div>`).join('') : '<div class="item-search-fact"><span>Related data</span><b>No extra details available</b></div>'}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="item-search-read" data-search-read="${index}">🔊 Read last four digits</button><button type="button" class="item-search-read" style="background:#0f766e" data-search-update="${index}">✎ Request update</button></div></article>`;
       }).join('');
-      results.querySelectorAll('[data-search-read]').forEach(button => button.addEventListener('click', () => speakItemSuffix(digits)));
+      results.querySelectorAll('[data-search-read]').forEach(button => button.addEventListener('click', () => {
+        const code = String(matches[Number(button.dataset.searchRead)]?.code ?? '').replace(/\D/g, '');
+        speakItemSuffix(code.slice(-4));
+      }));
       results.querySelectorAll('[data-search-update]').forEach(button => button.addEventListener('click', () => openLocationUpdateForm(matches[Number(button.dataset.searchUpdate)])));
-      if (speakUnique && matches.length === 1) speakItemSuffix(digits);
+      if (speakUnique && suffixSearch && suffixMatches.length === 1) speakItemSuffix(String(suffixMatches[0].code).replace(/\D/g, '').slice(-4));
     }
-
     function setItemSearchData(rows = locationSearchRows) {
       locationSearchRows = Array.isArray(rows) ? rows : [];
       itemSearchCatalog = buildItemSearchCatalog(locationSearchRows);
@@ -2037,13 +2051,24 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       event.preventDefault();
       searchItemsBySuffix(document.getElementById('itemSearchDigits').value);
     });
+    let itemSearchDebounce = null;
     document.getElementById('itemSearchDigits').addEventListener('input', event => {
-      const input = event.currentTarget;
-      input.value = input.value.replace(/\D/g, '').slice(0, 4);
-      if (input.value.length === 4) searchItemsBySuffix(input.value);
-      else {
-        document.getElementById('itemSearchResults').replaceChildren();
-        document.getElementById('itemSearchStatus').textContent = 'Enter the last four digits of an item number.';
+      const query = event.currentTarget.value.trim();
+      const results = document.getElementById('itemSearchResults');
+      const status = document.getElementById('itemSearchStatus');
+      clearTimeout(itemSearchDebounce);
+      if (!query) {
+        results.replaceChildren();
+        status.textContent = 'Search by item number, description, or parent lot / brand.';
+        return;
+      }
+      const isFourDigitSuffix = /^\d{4}$/.test(query);
+      const isFullNumericCode = /^\d{5,}$/.test(query);
+      if (isFourDigitSuffix || isFullNumericCode || query.length >= 3) {
+        itemSearchDebounce = setTimeout(() => searchItemsBySuffix(query), 250);
+      } else {
+        results.replaceChildren();
+        status.textContent = 'Type at least 3 characters to search automatically, or press Search Items.';
       }
     });
 
