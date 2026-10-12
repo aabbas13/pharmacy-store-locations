@@ -774,6 +774,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let locationMasterSheetName = 'Store Locations';
     let locationSearchRows = [];
     let itemSearchCatalog = [];
+    const HMC_UPDATE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSeDZEWyMPvZQkwuxotxHABTh4tuamn6Y_jaqrHZNYsV6OQMdw/viewform';
+    const HMC_UPDATE_FORM_ENTRIES = {
+      requester: 784746879, itemNumber: 94052109, itemDescription: 1281449298, parentLot: 339679408,
+      currentLocation: 89652224, currentPackSize: 2008796926, currentCartonSize: 1242427296,
+      currentCatchSize: 1719308592, currentStripSize: 484576827, fieldsToUpdate: 1253145424,
+      proposedLocation: 41379104, proposedPackSize: 65707480, proposedCartonSize: 397314343,
+      proposedCatchSize: 702863771, proposedStripSize: 1396746267, reason: 895361566
+    };
     let pickedPlacementLocation = '';
     let confirmedPickCount = 0;
     let placementUpdateRequired = false;
@@ -863,6 +871,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       window.speechSynthesis.speak(utterance);
     }
 
+    function openLocationUpdateForm(item) {
+      const pkg = item.package || getPackageConfig(item) || {};
+      const values = {
+        requester: pickedByIdentity?.display || '', itemNumber: item.code, itemDescription: item.name || '', parentLot: item.parentLot || '',
+        currentLocation: item.location || '', currentPackSize: pkg.packSize ?? '',
+        currentCartonSize: pkg.cartonSize ?? '', currentCatchSize: pkg.catchSize ?? '', currentStripSize: pkg.stripSize ?? '',
+        proposedLocation: item.location || '', proposedPackSize: pkg.packSize ?? '',
+        proposedCartonSize: pkg.cartonSize ?? '', proposedCatchSize: pkg.catchSize ?? '', proposedStripSize: pkg.stripSize ?? ''
+      };
+      const query = new URLSearchParams({ usp: 'pp_url' });
+      Object.entries(values).forEach(([key, value]) => {
+        const entryId = HMC_UPDATE_FORM_ENTRIES[key];
+        if (entryId && value !== undefined && value !== null && String(value) !== '') query.append(`entry.${entryId}`, String(value));
+      });
+      window.open(`${HMC_UPDATE_FORM_URL}?${query.toString()}`, '_blank', 'noopener');
+    }
+
     function searchItemsBySuffix(rawDigits, speakUnique = true) {
       const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 4);
       const status = document.getElementById('itemSearchStatus');
@@ -887,9 +912,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           ['Pack size (units / pack)', pkg.packSize], ['Carton size (packs / carton)', pkg.cartonSize],
           ['Catch size (packs / catch)', pkg.catchSize], ['Strip size (units / strip)', pkg.stripSize]
         ].filter(([label, value]) => value !== undefined && value !== null && String(value).trim() !== '' && !(label.startsWith('Strip') && Number(value) === 1));
-        return `<article class="item-search-result"><div class="item-search-code">${searchText(item.code)}</div><div class="item-search-description">${searchText(item.name || 'Description not provided')}</div><div class="item-search-facts">${facts.length ? facts.map(([label, value]) => `<div class="item-search-fact"><span>${searchText(label)}</span><b>${searchText(value)}</b></div>`).join('') : '<div class="item-search-fact"><span>Related data</span><b>No extra details available</b></div>'}</div><button type="button" class="item-search-read" style="margin-top:10px" data-search-read="${index}">🔊 Read last four digits</button></article>`;
+        return `<article class="item-search-result"><div class="item-search-code">${searchText(item.code)}</div><div class="item-search-description">${searchText(item.name || 'Description not provided')}</div><div class="item-search-facts">${facts.length ? facts.map(([label, value]) => `<div class="item-search-fact"><span>${searchText(label)}</span><b>${searchText(value)}</b></div>`).join('') : '<div class="item-search-fact"><span>Related data</span><b>No extra details available</b></div>'}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="item-search-read" data-search-read="${index}">🔊 Read last four digits</button><button type="button" class="item-search-read" style="background:#0f766e" data-search-update="${index}">✎ Request update</button></div></article>`;
       }).join('');
       results.querySelectorAll('[data-search-read]').forEach(button => button.addEventListener('click', () => speakItemSuffix(digits)));
+      results.querySelectorAll('[data-search-update]').forEach(button => button.addEventListener('click', () => openLocationUpdateForm(matches[Number(button.dataset.searchUpdate)])));
       if (speakUnique && matches.length === 1) speakItemSuffix(digits);
     }
 
