@@ -43,9 +43,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body { background-color: var(--bg); color: var(--text); padding: 12px; max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100vh; }
 
-    .app-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 0 0 10px; border-radius: 11px; background: #e2e8f0; }
+    .app-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; margin: 0 0 10px; border-radius: 11px; background: #e2e8f0; }
     .app-tab { display: block; text-align: center; padding: 9px 8px; border: 0; border-radius: 8px; color: #334155; background: #e2e8f0; text-decoration: none; font-size: .8rem; font-weight: 800; cursor: pointer; }
     .app-tab.active { color: #fff; background: var(--primary); box-shadow: 0 1px 4px #0f172a22; }
+    .item-search-view { max-width: 760px; margin: 0 auto; }
+    .item-search-panel { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 3px 12px #0f172a0b; }
+    .item-search-form { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; margin-top: 12px; }
+    .item-search-form input { min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 10px; font-size: 1.25rem; letter-spacing: .2em; }
+    .item-search-form button, .item-search-read { border: 0; border-radius: 10px; padding: 11px 15px; background: var(--primary); color: #fff; font-weight: 800; cursor: pointer; }
+    .item-search-hint, #itemSearchStatus { color: var(--muted); font-size: .82rem; line-height: 1.45; margin-top: 8px; }
+    .item-search-result { border: 1px solid var(--border); border-radius: 12px; padding: 13px; margin-top: 10px; background: #fff; overflow-wrap: anywhere; }
+    .item-search-code { font-size: 1.2rem; font-weight: 900; color: var(--primary); }
+    .item-search-description { font-weight: 700; margin: 3px 0 9px; }
+    .item-search-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+    .item-search-fact { padding: 8px; border-radius: 8px; background: #f1f5f9; min-width: 0; }
+    .item-search-fact span { display:block; color:var(--muted); font-size:.67rem; text-transform:uppercase; font-weight:800; }
+    .item-search-fact b { display:block; margin-top:2px; font-size:.88rem; }
+    @media(max-width:480px) { .item-search-panel { padding: 12px; } .item-search-form { grid-template-columns:1fr; } .item-search-form button { width:100%; } .app-tab { padding:8px 3px; font-size:.72rem; } }
 
     header { background: var(--primary); color: white; padding: 14px; border-radius: 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
     .header-title-box { display: flex; flex: 1; min-width: 0; flex-direction: column; text-align: left; }
@@ -283,6 +297,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <nav class="app-tabs" aria-label="HMC apps">
     <button type="button" id="pickerTabButton" class="app-tab active" aria-current="page" onclick="switchAppView('picker')">📦 Pick Helper</button>
     <button type="button" id="doubleCheckTabButton" class="app-tab" onclick="switchAppView('doublecheck')">✓ Double Check</button>
+    <button type="button" id="itemSearchTabButton" class="app-tab" onclick="switchAppView('search')">🔎 Item Search</button>
   </nav>
 
   <div id="pickerAppView">
@@ -669,6 +684,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   </div>
 
+  <div id="itemSearchApp" class="item-search-view hidden">
+    <section class="item-search-panel">
+      <h1 style="font-size:1.25rem">Search the shared Location &amp; Package Master</h1>
+      <p class="item-search-hint">Enter the last four digits of an item number. Matching results include the item's location, brand/parent lot, and saved package details. Search uses the latest sheet copy available on this device.</p>
+      <form id="itemSearchForm" class="item-search-form">
+        <input id="itemSearchDigits" type="text" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" aria-label="Last four digits of item number" placeholder="4 digits" required>
+        <button type="submit">Search Items</button>
+      </form>
+      <div id="itemSearchStatus" role="status" aria-live="polite">Loading shared-sheet search data…</div>
+    </section>
+    <section id="itemSearchResults" aria-live="polite"></section>
+  </div>
+
   <div id="doubleCheckApp" class="double-check-app hidden">
 <div id="checkerIdentitySetup" class="identity-overlay" role="dialog" aria-modal="true" aria-labelledby="checkerIdentityTitle">
     <form id="checkerIdentityForm" class="identity-dialog">
@@ -724,13 +752,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <script>
     function switchAppView(view) {
-      const showPicker = view !== 'doublecheck';
+      const showPicker = view === 'picker';
+      const showDoubleCheck = view === 'doublecheck';
+      const showSearch = view === 'search';
       document.getElementById('pickerAppView').classList.toggle('hidden', !showPicker);
-      document.getElementById('doubleCheckApp').classList.toggle('hidden', showPicker);
+      document.getElementById('doubleCheckApp').classList.toggle('hidden', !showDoubleCheck);
+      document.getElementById('itemSearchApp').classList.toggle('hidden', !showSearch);
       document.getElementById('pickerTabButton').classList.toggle('active', showPicker);
-      document.getElementById('doubleCheckTabButton').classList.toggle('active', !showPicker);
+      document.getElementById('doubleCheckTabButton').classList.toggle('active', showDoubleCheck);
+      document.getElementById('itemSearchTabButton').classList.toggle('active', showSearch);
       document.getElementById('pickerTabButton').toggleAttribute('aria-current', showPicker);
-      document.getElementById('doubleCheckTabButton').toggleAttribute('aria-current', !showPicker);
+      document.getElementById('doubleCheckTabButton').toggleAttribute('aria-current', showDoubleCheck);
+      document.getElementById('itemSearchTabButton').toggleAttribute('aria-current', showSearch);
       window.scrollTo(0, 0);
     }
 
@@ -739,6 +772,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let locationMasterRows = [];
     let locationMasterHeaders = [];
     let locationMasterSheetName = 'Store Locations';
+    let locationSearchRows = [];
+    let itemSearchCatalog = [];
     let pickedPlacementLocation = '';
     let confirmedPickCount = 0;
     let placementUpdateRequired = false;
@@ -767,6 +802,104 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (parentLotMatch) return parentLotMatch;
       }
       return packagingDb[item.code] || null;
+    }
+
+    function buildItemSearchCatalog(rows = locationSearchRows) {
+      const normalizeHeader = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const read = (row, aliases) => {
+        const key = Object.keys(row || {}).find(header => aliases.includes(normalizeHeader(header)));
+        return key ? String(row[key] ?? '').trim() : '';
+      };
+      const merged = new Map();
+      for (const row of rows || []) {
+        const code = read(row, ['itemnumber', 'itemcode', 'item', 'code']);
+        if (!code) continue;
+        const name = read(row, ['itemdescription', 'description', 'name']);
+        const parentLot = read(row, ['parentlotbrand', 'parentlot', 'parentlotnumber', 'brand', 'brandname']);
+        const key = packageConfigKey(code, name, parentLot);
+        const record = merged.get(key) || { code, name, parentLot, location: '', uom: '', subinventory: '' };
+        record.name ||= name;
+        record.parentLot ||= parentLot;
+        record.location ||= read(row, ['location', 'storelocation', 'binlocation', 'bin', 'locator', 'masterlocationitemlevel']);
+        record.uom ||= read(row, ['uom', 'unitofmeasure', 'primaryuom']);
+        record.subinventory ||= read(row, ['subinventory', 'subinv']);
+        merged.set(key, record);
+      }
+      for (const config of Object.values(packagingDb || {})) {
+        const key = packageConfigKey(config.code, config.name, config.parentLot);
+        const record = merged.get(key) || { code: config.code, name: config.name || '', parentLot: config.parentLot || '', location: '', uom: '', subinventory: '' };
+        record.name ||= config.name || '';
+        record.parentLot ||= config.parentLot || '';
+        merged.set(key, record);
+      }
+      const records = [...merged.values()];
+      const genericRecords = records.filter(record => !record.parentLot);
+      const brandedRecords = records.filter(record => record.parentLot);
+      for (const generic of genericRecords) {
+        const related = brandedRecords.filter(record => String(record.code).trim() === String(generic.code).trim() && normalizePackagePart(record.name) === normalizePackagePart(generic.name));
+        related.forEach(record => {
+          record.location ||= generic.location;
+          record.uom ||= generic.uom;
+          record.subinventory ||= generic.subinventory;
+        });
+      }
+      const visibleRecords = records.filter(record => record.parentLot || !brandedRecords.some(branded => String(branded.code).trim() === String(record.code).trim() && normalizePackagePart(branded.name) === normalizePackagePart(record.name)));
+      return visibleRecords.map(record => ({
+        ...record,
+        location: record.location || locationMap[String(record.code).trim()] || '',
+        package: getPackageConfig(record)
+      })).sort((a, b) => String(a.code).localeCompare(String(b.code)) || String(a.parentLot).localeCompare(String(b.parentLot)));
+    }
+
+    function searchText(value) {
+      return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    }
+
+    function speakItemSuffix(digits) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(`Item number ending ${digits.split('').join(' ')}`);
+      utterance.rate = 0.85;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function searchItemsBySuffix(rawDigits, speakUnique = true) {
+      const digits = String(rawDigits || '').replace(/\D/g, '').slice(0, 4);
+      const status = document.getElementById('itemSearchStatus');
+      const results = document.getElementById('itemSearchResults');
+      if (digits.length !== 4) {
+        results.replaceChildren();
+        status.textContent = 'Enter exactly four digits to search.';
+        return;
+      }
+      itemSearchCatalog = buildItemSearchCatalog();
+      const matches = itemSearchCatalog.filter(item => String(item.code).replace(/\D/g, '').endsWith(digits));
+      if (!matches.length) {
+        status.textContent = `No item numbers end in ${digits}. ${itemSearchCatalog.length ? 'Check the digits or refresh the shared sheet.' : 'No shared-sheet data is cached on this device yet; connect and refresh the Location Master.'}`;
+        results.replaceChildren();
+        return;
+      }
+      status.textContent = `${matches.length} matching ${matches.length === 1 ? 'item' : 'items'} found${locationSearchRows.length ? ' in the shared-sheet data' : ' from saved app data'}.`;
+      results.innerHTML = matches.map((item, index) => {
+        const pkg = item.package || {};
+        const facts = [
+          ['Location', item.location], ['Parent lot / brand', item.parentLot], ['UOM', item.uom], ['Subinventory', item.subinventory],
+          ['Pack size (units / pack)', pkg.packSize], ['Carton size (packs / carton)', pkg.cartonSize],
+          ['Catch size (packs / catch)', pkg.catchSize], ['Strip size (units / strip)', pkg.stripSize]
+        ].filter(([label, value]) => value !== undefined && value !== null && String(value).trim() !== '' && !(label.startsWith('Strip') && Number(value) === 1));
+        return `<article class="item-search-result"><div class="item-search-code">${searchText(item.code)}</div><div class="item-search-description">${searchText(item.name || 'Description not provided')}</div><div class="item-search-facts">${facts.length ? facts.map(([label, value]) => `<div class="item-search-fact"><span>${searchText(label)}</span><b>${searchText(value)}</b></div>`).join('') : '<div class="item-search-fact"><span>Related data</span><b>No extra details available</b></div>'}</div><button type="button" class="item-search-read" style="margin-top:10px" data-search-read="${index}">🔊 Read last four digits</button></article>`;
+      }).join('');
+      results.querySelectorAll('[data-search-read]').forEach(button => button.addEventListener('click', () => speakItemSuffix(digits)));
+      if (speakUnique && matches.length === 1) speakItemSuffix(digits);
+    }
+
+    function setItemSearchData(rows = locationSearchRows) {
+      locationSearchRows = Array.isArray(rows) ? rows : [];
+      itemSearchCatalog = buildItemSearchCatalog(locationSearchRows);
+      const status = document.getElementById('itemSearchStatus');
+      if (status) status.textContent = itemSearchCatalog.length
+        ? `${itemSearchCatalog.length.toLocaleString()} searchable item/brand records ready${navigator.onLine ? ' · shared sheet refresh will check for updates' : ' · offline cached data'}.`
+        : 'No shared-sheet data is cached yet. Connect and refresh the Location Master first.';
     }
     let currentIndex = 0;
     let sessionId = '';
@@ -1766,6 +1899,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return {
         records: combinedRecords,
         packageConfigs: [...configs.values()],
+        searchRows: [...primary.rows, ...(packageTab?.rows || [])],
         rows: primary.rows,
         headers: primary.headers,
         endpoint: packageTab ? `${primary.endpoint} + Location Package Master` : primary.endpoint,
@@ -1791,9 +1925,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           locationMap = cached.locationMap;
           if (cached.packagingDb && Object.keys(cached.packagingDb).length) packagingDb = cached.packagingDb;
           if (cached.rows) locationMasterRows = cached.rows;
+          locationSearchRows = cached.searchRows || cached.rows || locationMasterRows;
           if (cached.headers) locationMasterHeaders = cached.headers;
           if (cached.sheetName) locationMasterSheetName = cached.sheetName;
           applyLocationMapToPickList();
+          setItemSearchData(locationSearchRows);
           saveSessionState();
           const cachedTime = cached.refreshedAt ? new Date(cached.refreshedAt).toLocaleString() : 'time unknown';
           const active = Object.keys(locationMap).length;
@@ -1832,6 +1968,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           locationMap: nextMap,
           packagingDb: nextPackagingDb,
           rows: result.rows,
+          searchRows: result.searchRows,
           headers: result.headers,
           refreshedAt: new Date().toISOString(),
           fingerprint: locationFingerprint(result.records, result.packageConfigs),
@@ -1842,7 +1979,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         locationMap = nextMap;
         packagingDb = nextPackagingDb;
         locationMasterRows = result.rows;
+        locationSearchRows = result.searchRows || result.rows || [];
         locationMasterHeaders = result.headers;
+        setItemSearchData(locationSearchRows);
         applyLocationMapToPickList();
         saveSessionState();
         document.getElementById('locStatus').innerText = `✓ Loaded ${Object.keys(locationMap).length} locations from Google Sheets`;
@@ -1868,6 +2007,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     document.getElementById('refreshGoogleLocations').addEventListener('click', refreshGoogleLocationMaster);
 
+    document.getElementById('itemSearchForm').addEventListener('submit', event => {
+      event.preventDefault();
+      searchItemsBySuffix(document.getElementById('itemSearchDigits').value);
+    });
+    document.getElementById('itemSearchDigits').addEventListener('input', event => {
+      const input = event.currentTarget;
+      input.value = input.value.replace(/\D/g, '').slice(0, 4);
+      if (input.value.length === 4) searchItemsBySuffix(input.value);
+      else {
+        document.getElementById('itemSearchResults').replaceChildren();
+        document.getElementById('itemSearchStatus').textContent = 'Enter the last four digits of an item number.';
+      }
+    });
+
     // Location File Parser
     document.getElementById('locationFile').addEventListener('change', function(e) {
       const file = e.target.files[0];
@@ -1881,6 +2034,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const sheet = workbook.Sheets[locationMasterSheetName];
         const rows = XLSX.utils.sheet_to_json(sheet);
         locationMasterRows = rows.map(row => ({ ...row }));
+        locationSearchRows = locationMasterRows;
         locationMasterHeaders = rows.length ? Object.keys(rows[0]) : [];
 
         locationMap = {};
@@ -1895,6 +2049,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             locationMap[String(code).trim()] = filterPreferredLocations(String(loc).trim());
           }
         });
+        setItemSearchData(locationSearchRows);
 
         try {
           await writeLocationSourceData({ rows: locationMasterRows, headers: locationMasterHeaders, sheetName: locationMasterSheetName });
