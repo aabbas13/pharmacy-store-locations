@@ -107,6 +107,43 @@ if not isinstance(device_id, str) or not re.fullmatch(r"[a-f0-9-]{36}", device_i
     st.stop()
 
 
+BIN_LOCATION_COMPONENT = st.components.v2.component(
+    name="store_bin_location_input",
+    html='<label for="bin-location-input">Bin location*</label><input id="bin-location-input" type="text" autocomplete="off" autocapitalize="characters" placeholder="XX.XX.XX.XXXX"><small>Format: XX.XX.XX.XXXX — dots are added automatically.</small>',
+    css="""
+      label { display: block; margin-bottom: 0.35rem; color: var(--st-text-color); font: 600 .9rem var(--st-font); }
+      input { box-sizing: border-box; width: 100%; min-height: 44px; padding: .55rem .7rem; border: 1px solid var(--st-border-color); border-radius: .5rem; background: var(--st-background-color); color: var(--st-text-color); font: 1rem var(--st-font); }
+      input:focus { outline: 2px solid var(--st-primary-color); outline-offset: 1px; }
+      small { display: block; margin-top: .35rem; color: var(--st-text-color); opacity: .72; font: .82rem var(--st-font); }
+    """,
+    js="""
+      export default function({ parentElement, data, setStateValue }) {
+        const input = parentElement.querySelector("#bin-location-input");
+        const format = (value) => {
+          const raw = String(value || "").replace(/[^a-z0-9]/gi, "").toUpperCase().slice(0, 10);
+          return [raw.slice(0, 2), raw.slice(2, 4), raw.slice(4, 6), raw.slice(6, 10)]
+            .filter(Boolean).join(".");
+        };
+        if (input.value !== (data?.value || "")) input.value = data?.value || "";
+
+        const handleInput = () => {
+          const caret = input.selectionStart ?? input.value.length;
+          const rawBeforeCaret = input.value.slice(0, caret).replace(/[^a-z0-9]/gi, "").length;
+          const formatted = format(input.value);
+          const charsBeforeCaret = Math.min(rawBeforeCaret, formatted.split(".").join("").length);
+          const dotsBeforeCaret = Math.min(3, Math.floor(charsBeforeCaret / 2));
+          input.value = formatted;
+          const nextCaret = Math.min(formatted.length, charsBeforeCaret + dotsBeforeCaret);
+          input.setSelectionRange(nextCaret, nextCaret);
+          setStateValue("value", formatted);
+        };
+        input.addEventListener("input", handleInput);
+        return () => input.removeEventListener("input", handleInput);
+      }
+    """,
+)
+
+
 VOICE_COMPONENT = st.components.v2.component(
     name="store_voice_command_control",
     html="""
@@ -272,14 +309,47 @@ def fix_location_format(loc_str: str) -> str:
     if not loc_str:
         return ""
     cleaned = loc_str.upper().strip()
-    if re.match(r"^[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,2}$", cleaned):
+    if re.match(r"^[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,4}$", cleaned):
         return cleaned
     raw_chars = re.sub(r'[^A-Z0-9]', '', cleaned)
     if len(raw_chars) == 7:
         return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:5]}.{raw_chars[5:7]}"
     elif len(raw_chars) == 8:
         return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:6]}.{raw_chars[6:8]}"
+    elif len(raw_chars) in (9, 10):
+        return f"{raw_chars[0:2]}.{raw_chars[2:4]}.{raw_chars[4:6]}.{raw_chars[6:]}"
     return cleaned
+
+
+def format_bin_location_input(value: str) -> str:
+    """Insert dots after each two-character location part while typing."""
+    raw = re.sub(r"[^A-Z0-9]", "", str(value).upper())[:10]
+    parts = [raw[:2], raw[2:4], raw[4:6], raw[6:10]]
+    return ".".join(part for part in parts if part)
+
+
+def sync_bin_location_parts() -> None:
+    """Normalize the full location field and keep navigation state in sync."""
+    component_state = st.session_state.get("bin_location_component", {})
+    typed_value = component_state.get("value", "") if isinstance(component_state, dict) else ""
+    formatted = format_bin_location_input(typed_value)
+    st.session_state.bin_location_in = formatted
+    parts = formatted.split(".") if formatted else []
+    parts += [""] * (4 - len(parts))
+
+    area, second, third, fourth = parts[:4]
+    current_type = st.session_state.get("bin_type_in", "DR").strip().upper()
+    if second == "FR":
+        bin_type, row, column = "FR", third, fourth
+    elif current_type == "FR" and third == "01":
+        bin_type, row, column = "FR", second, fourth
+    else:
+        bin_type, row, column = second, third, fourth
+
+    st.session_state.bin_area_in = area
+    st.session_state.bin_type_in = bin_type
+    st.session_state.bin_sig1_in = row
+    st.session_state.bin_sig2_in = column
 
 
 
@@ -324,7 +394,7 @@ def parse_voice_command(transcript: str) -> dict:
         if word not in LOCATION_FILLER_WORDS
     ).upper()
     location = fix_location_format(location_text)
-    if not re.fullmatch(r"[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,2}", location):
+    if not re.fullmatch(r"[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,4}", location):
         return {
             "action": "invalid",
             "message": "I heard the item number, but not a valid location. Say, for example, “item 4005 in A1 DR CA 03”.",
@@ -405,6 +475,14 @@ def move_bin_vertical(direction: str, start_row: str, max_row: str, max_col_val:
             st.session_state.bin_sig2_in = f"{next_number:02d}"
         except ValueError:
             pass
+    st.session_state.bin_location_in = format_bin_location_input(
+        location_from_bin_parts(
+            st.session_state.bin_area_in,
+            st.session_state.bin_type_in,
+            st.session_state.bin_sig1_in,
+            st.session_state.bin_sig2_in,
+        )
+    )
     st.session_state.focus_item_search = True
     if "device_bin_settings" in globals() and "device_id" in globals():
         device_bin_settings["last_bin_parts"] = {
@@ -744,6 +822,14 @@ else:
         st.session_state.bin_sig1_in = p_bin.get("sig1", "")
     if "bin_sig2_in" not in st.session_state:
         st.session_state.bin_sig2_in = p_bin.get("sig2", "")
+    if "bin_location_in" not in st.session_state:
+        initial_location = location_from_bin_parts(
+            st.session_state.bin_area_in,
+            st.session_state.bin_type_in,
+            st.session_state.bin_sig1_in,
+            st.session_state.bin_sig2_in,
+        )
+        st.session_state.bin_location_in = format_bin_location_input(initial_location)
     if "focus_item_search" not in st.session_state:
         st.session_state.focus_item_search = False
 
@@ -803,15 +889,26 @@ else:
 
     with st.expander("⚙️ Bin settings", expanded=False):
         st.caption("These settings are saved separately for this browser/device.")
-        col_a, col_t = st.columns(2)
-        col_s1, col_s2 = st.columns(2)
+        location_component = BIN_LOCATION_COMPONENT(
+            data={"value": st.session_state.bin_location_in},
+            default={"value": st.session_state.bin_location_in},
+            key="bin_location_component",
+            height=100,
+            width="stretch",
+            on_value_change=sync_bin_location_parts,
+        )
+        current_location_value = getattr(location_component, "value", None)
+        if isinstance(current_location_value, str):
+            st.session_state.bin_location_in = format_bin_location_input(current_location_value)
 
-        in_area = col_a.text_input("Area*", key="bin_area_in").strip().upper()
-        in_type = col_t.text_input("Type*", key="bin_type_in").strip().upper()
-        in_sig1 = col_s1.text_input("Sigma 3 (Row)*", key="bin_sig1_in").strip().upper()
-        in_sig2 = col_s2.text_input("Sigma 4 (Col#)*", key="bin_sig2_in").strip().upper()
-
-        all_fields_filled = all([in_area, in_type, in_sig1, in_sig2])
+        in_area = st.session_state.bin_area_in.strip().upper()
+        in_type = st.session_state.bin_type_in.strip().upper()
+        in_sig1 = st.session_state.bin_sig1_in.strip().upper()
+        in_sig2 = st.session_state.bin_sig2_in.strip().upper()
+        all_fields_filled = bool(re.fullmatch(
+            r"[A-Z0-9]{2}\.[A-Z0-9]{2}\.[A-Z0-9]{1,2}\.[A-Z0-9]{1,4}",
+            st.session_state.bin_location_in.strip().upper(),
+        ))
         device_bin_settings["last_bin_parts"] = {
             "area": in_area, "type": in_type, "sig1": in_sig1, "sig2": in_sig2
         }
