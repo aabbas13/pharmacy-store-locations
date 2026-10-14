@@ -465,6 +465,15 @@ def load_data():
 items = load_data()
 
 
+@st.cache_data(ttl=60, max_entries=1)
+def export_spreadsheet_copy(spreadsheet_id: str) -> bytes:
+    """Return a short-lived Excel export of the complete Google workbook."""
+    return gc.export(
+        spreadsheet_id,
+        format="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 def assign_item_to_location(item: dict, location: str) -> str:
     if location in item["locations"]:
         return "exists"
@@ -499,6 +508,18 @@ with col_mode:
 
 with col_sheet_btn:
     st.link_button("📂 Open Sheet", sheet_url, use_container_width=True)
+    try:
+        sheet_copy = export_spreadsheet_copy(spreadsheet.id)
+        st.download_button(
+            "⬇️ Download copy",
+            data=sheet_copy,
+            file_name="HMC MCP Store Locations.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            help="Download a copy of the complete Google Sheets workbook as an Excel file.",
+        )
+    except Exception:
+        st.error("Could not prepare the sheet copy. Please try again later.")
 
 save_persistent_state({"app_mode": app_mode})
 
