@@ -835,6 +835,8 @@ else:
         def retreat_vertical():
             move_bin_vertical("previous", start_row, max_row, max_col_val)
 
+    row_fmt_info = get_row_format(start_row, max_row)
+
     if all_fields_filled:
         st.success(f"📍 Active Target Bin: **`{target_bin_location}`**")
     else:
