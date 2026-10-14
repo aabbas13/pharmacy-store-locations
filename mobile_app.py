@@ -27,10 +27,72 @@ def save_persistent_state(data: dict):
     except Exception:
         pass
 
+
+def load_device_bin_settings(device_id: str) -> dict:
+    """Load bin setup from a file unique to this browser profile."""
+    path = os.path.join(".device_settings", f"bin_{device_id}.json")
+    try:
+        with open(path, "r", encoding="utf-8") as state_file:
+            settings = json.load(state_file)
+            return settings if isinstance(settings, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_device_bin_settings(device_id: str, settings: dict):
+    """Save this browser's bin setup without overwriting other devices."""
+    directory = ".device_settings"
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"bin_{device_id}.json")
+    temp_path = f"{path}.tmp"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as state_file:
+            json.dump(settings, state_file)
+        os.replace(temp_path, path)
+    except OSError:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
 persisted_data = load_persistent_state()
 
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
+
+# Give each browser profile a stable, separate settings key.
+device_id = str(st.query_params.get("device_id", ""))
+device_id_is_valid = bool(re.fullmatch(r"[a-f0-9-]{36}", device_id))
+device_ready = str(st.query_params.get("device_ready", "")) == "1"
+st.components.v1.html("""
+<script>
+  const storageKey = 'store-location-manager-device-id';
+  const url = new URL(window.parent.location.href);
+  const makeDeviceId = () => crypto.randomUUID ? crypto.randomUUID() :
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  let browserId;
+  try {
+    browserId = localStorage.getItem(storageKey);
+    if (!browserId) browserId = makeDeviceId();
+    localStorage.setItem(storageKey, browserId);
+  } catch (error) {
+    browserId = url.searchParams.get('device_id') || makeDeviceId();
+  }
+  if (url.searchParams.get('device_id') !== browserId ||
+      url.searchParams.get('device_ready') !== '1') {
+    url.searchParams.set('device_id', browserId);
+    url.searchParams.set('device_ready', '1');
+    window.parent.location.replace(url.toString());
+  }
+</script>
+""", height=1)
+if not device_id_is_valid or not device_ready:
+    st.info("Preparing this device’s settings…")
+    st.stop()
 
 
 VOICE_COMPONENT = st.components.v2.component(
@@ -159,6 +221,11 @@ st.markdown("""
     .stButton > button[kind="primary"] {
         box-shadow: 0 2px 10px rgba(255, 75, 75, 0.45) !important;
         border-color: #FF4B4B !important;
+    }
+    @media (max-width: 640px) {
+        .block-container { padding: .65rem !important; }
+        div[data-testid="stVerticalBlock"] { gap: .55rem; }
+        .stCaption { line-height: 1.25; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -326,6 +393,14 @@ def move_bin_vertical(direction: str, start_row: str, max_row: str, max_col_val:
         except ValueError:
             pass
     st.session_state.focus_item_search = True
+    if "device_bin_settings" in globals() and "device_id" in globals():
+        device_bin_settings["last_bin_parts"] = {
+            "area": st.session_state.bin_area_in,
+            "type": st.session_state.bin_type_in,
+            "sig1": st.session_state.bin_sig1_in,
+            "sig2": st.session_state.bin_sig2_in,
+        }
+        save_device_bin_settings(device_id, device_bin_settings)
 
 def location_from_bin_parts(area: str, bin_type: str, row: str, column: str) -> str:
     if not all((area, bin_type, row, column)):
@@ -620,8 +695,11 @@ if app_mode == "🔍 Item Search":
 else:
     st.subheader("📦 Bin Filling Mode")
 
-    p_bin = persisted_data.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
-    p_bounds = persisted_data.get("vertical_bounds", {"start": "AA", "max": "AO", "max_col": "30"})
+    device_bin_settings = load_device_bin_settings(device_id)
+    p_bin = device_bin_settings.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
+    p_bounds = device_bin_settings.get("vertical_bounds", {"start": "AA", "max": "AO", "max_col": "30"})
+    if "vertical_bounds" not in st.session_state:
+        st.session_state.vertical_bounds = p_bounds
 
     # Direct integration to widget keys to avoid variable mismatch
     if "bin_area_in" not in st.session_state:
@@ -689,8 +767,10 @@ else:
                 else:
                     st.warning(f"{len(matches)} items end in {command['suffix']}. Use the item search to choose the right one.")
 
-    with st.expander("📍 Manual Location Input", expanded=False):
-        col_a, col_t, col_s1, col_s2 = st.columns(4)
+    with st.expander("⚙️ Bin settings", expanded=False):
+        st.caption("These settings are saved separately for this browser/device.")
+        col_a, col_t = st.columns(2)
+        col_s1, col_s2 = st.columns(2)
 
         in_area = col_a.text_input("Area*", key="bin_area_in").strip().upper()
         in_type = col_t.text_input("Type*", key="bin_type_in").strip().upper()
@@ -698,22 +778,19 @@ else:
         in_sig2 = col_s2.text_input("Sigma 4 (Col#)*", key="bin_sig2_in").strip().upper()
 
         all_fields_filled = all([in_area, in_type, in_sig1, in_sig2])
+        device_bin_settings["last_bin_parts"] = {
+            "area": in_area, "type": in_type, "sig1": in_sig1, "sig2": in_sig2
+        }
 
         if all_fields_filled:
-            if in_type == "FR":
-                active_bin_gen = f"{in_area}.{in_sig1}.01.{in_sig2}"
-            else:
-                active_bin_gen = f"{in_area}.{in_type}.{in_sig1}.{in_sig2}"
-            target_bin_location = fix_location_format(active_bin_gen)
-            save_persistent_state({
-                "last_bin_parts": {"area": in_area, "type": in_type, "sig1": in_sig1, "sig2": in_sig2},
-                "last_bin_location": target_bin_location
-            })
+            target_bin_location = location_from_bin_parts(in_area, in_type, in_sig1, in_sig2)
+            device_bin_settings["last_bin_location"] = target_bin_location
         else:
             target_bin_location = ""
 
-        st.markdown("**⚙️ Row / Column Settings**")
-        c_conf1, c_conf2, c_conf3 = st.columns(3)
+        st.markdown("**Row / Column Settings**")
+        c_conf1, c_conf2 = st.columns(2)
+        c_conf3, _ = st.columns(2)
         start_row = c_conf1.text_input(
             "Start Row (Top)",
             value=p_bounds.get("start", "AA"),
@@ -727,17 +804,18 @@ else:
             value=p_bounds.get("max_col", "30"),
             help="Once Sigma 4 (Col#) passes this number, it wraps back to 01."
         ).strip()
-        st.caption("Max Row can be the full row (e.g. 'AO') or just the row identifier (e.g. 'O'). Only the row identifier (the last character/digits) is used as the limit — the prefix is never auto-incremented.")
+        st.caption("Max Row can be a full row (AO) or its final identifier (O).")
         try:
             max_col_val = int(max_col_raw)
             if max_col_val < 1:
                 max_col_val = 30
         except ValueError:
             max_col_val = 30
-        # Save these bounds for the next session
-        save_persistent_state({"vertical_bounds": {"start": start_row, "max": max_row, "max_col": max_col_raw}})
-
-        row_fmt_info = get_row_format(start_row, max_row)
+        st.session_state.vertical_bounds = {
+            "start": start_row, "max": max_row, "max_col": max_col_raw
+        }
+        device_bin_settings["vertical_bounds"] = st.session_state.vertical_bounds
+        save_device_bin_settings(device_id, device_bin_settings)
 
         def advance_vertical():
             move_bin_vertical("next", start_row, max_row, max_col_val)
@@ -762,14 +840,11 @@ else:
             f"{_prefix_part}row identifier `{row_fmt_info['start_char']}`–`{row_fmt_info['max_char']}` "
             f"(wraps back to `{row_fmt_info['start_char']}` and bumps the column after `{row_fmt_info['max_char']}`)."
         )
-    st.caption(f"📏 **Max Row:** `{max_row}` — {row_def_caption} **Max Column:** `{max_col_val:02d}`.")
 
     if all_fields_filled:
         b_prevloc, b_nextloc = st.columns(2)
-        b_prevloc.button("⬆️ Previous Vertical Location", use_container_width=True, on_click=retreat_vertical)
-        b_nextloc.button("⬇️ Next Vertical Location", use_container_width=True, on_click=advance_vertical)
-
-    st.divider()
+        b_prevloc.button("⬅️ Previous bin", use_container_width=True, on_click=retreat_vertical)
+        b_nextloc.button("Next bin ➡️", use_container_width=True, on_click=advance_vertical)
 
     if "last_assigned_item" not in st.session_state:
         st.session_state.last_assigned_item = persisted_data.get("last_assigned_item_data", None)
@@ -803,7 +878,7 @@ else:
                 st.session_state.focus_item_search = True
 
     st.text_input(
-        "Search Item to Assign (Type 4 digits or Name)",
+        "Add item to this bin",
         placeholder="E.G. 1234 OR PARACETAMOL",
         key="bin_digit_srch",
         on_change=handle_search_and_assign,
