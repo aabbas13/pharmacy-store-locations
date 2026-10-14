@@ -235,7 +235,8 @@ st.markdown("""
         border-color: #FF4B4B !important;
     }
     @media (max-width: 640px) {
-        .block-container { padding: .65rem !important; }
+        /* Keep the first controls below Streamlit's fixed mobile toolbar. */
+        .block-container { padding: 4rem .65rem .65rem !important; }
         div[data-testid="stVerticalBlock"] { gap: .55rem; }
         .stCaption { line-height: 1.25; }
     }
