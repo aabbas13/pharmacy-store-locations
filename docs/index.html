@@ -65,6 +65,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .header-title-box { display: flex; flex: 1; min-width: 0; flex-direction: column; text-align: left; }
     .header-main { font-weight: bold; font-size: 1.05rem; }
     .header-sub { font-size: 0.8rem; opacity: 0.9; margin-top: 2px; }
+    .header-date { font-size: 0.74rem; font-weight: 700; margin-top: 3px; color: #dbeafe; }
     .header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; max-width: 62%; }
     .header-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: none; }
     .header-btn.voice-active { background: #166534; border-color: #86efac; }
@@ -83,6 +84,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       header { padding: 10px; align-items: flex-start; }
       .header-main { font-size: 0.88rem; }
       .header-sub { font-size: 0.65rem; }
+      .header-date { font-size: 0.62rem; }
       .header-actions { max-width: 60%; }
       .header-btn { padding: 5px 6px; font-size: 0.68rem; }
       .voice-phrase-row { grid-template-columns: 1fr; gap: 3px; }
@@ -286,6 +288,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <div class="header-title-box">
       <span class="header-main" id="headerTitle">🏥 HMC Picking Helper</span>
       <span class="header-sub" id="headerSubtitle">Move Order & Customer Header Details</span>
+      <span class="header-date" id="headerPickSlipDate" hidden></span>
     </div>
     <div class="header-actions">
       <button class="header-btn" id="voiceModeBtn" type="button" onclick="toggleVoiceMode()">🎙 Start Voice</button>
@@ -718,7 +721,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div id="importStatus" class="small" role="status" aria-live="polite"></div>
     </section>
     <section id="sessionPanel" class="panel hidden">
-      <div class="workhead"><div><b id="sourceName">Report</b><div class="small" id="sessionMeta"></div></div><div class="actions"><button class="secondary" id="speakBtn" type="button">🔊 Read item</button><button class="danger" id="newReportBtn" type="button">New report</button></div></div>
+      <div class="workhead"><div><b id="sourceName">Report</b><div class="small" id="sessionPickSlipDate"></div><div class="small" id="sessionMeta"></div></div><div class="actions"><button class="secondary" id="speakBtn" type="button">🔊 Read item</button><button class="danger" id="newReportBtn" type="button">New report</button></div></div>
       <div class="summary"><div class="metric"><b id="totalCount">0</b><span>Report lines</span></div><div class="metric"><b id="checkedCount">0</b><span>Checked</span></div><div class="metric"><b id="issueCount">0</b><span>Lines with comments</span></div><div class="metric"><b id="remainingCount">0</b><span>Remaining</span></div></div>
       <div class="progress-label"><span id="progressText">0 of 0 complete</span><span id="percentText">0%</span></div><div class="progress-wrap"><div id="progressBar" class="progress"></div></div>
       <div id="pendingBanner" class="banner warn hidden"></div>
@@ -985,6 +988,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let originalMerges = [];
     let moveOrderNum = "UNKNOWN_MO";
     let customerName = "UNKNOWN_CUSTOMER";
+    let pickSlipDate = '';
 
     function getFormattedTimestamp() {
       const d = new Date();
@@ -1019,7 +1023,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         pickList, packagingDb, currentIndex, locationMap, moveOrderNum, customerName,
         pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
         rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges,
-        pickedByIdentity
+        pickSlipDate, pickedByIdentity
       };
     }
 
@@ -1119,6 +1123,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       moveOrderNum = saved.moveOrderNum || 'UNKNOWN_MO';
       customerName = saved.customerName || 'UNKNOWN_CUSTOMER';
       rawHeaderMatrix = saved.rawHeaderMatrix || [];
+      pickSlipDate = saved.pickSlipDate || getPickSlipDateFromValue(rawHeaderMatrix && rawHeaderMatrix[1] && rawHeaderMatrix[1][9]) || pickSlipDate;
       rawFooterRows = saved.rawFooterRows || [];
       irFooterRow = saved.irFooterRow || [];
       pickedByIdentity = saved.pickedByIdentity || null;
@@ -1290,6 +1295,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_placementUpdateRequired', String(placementUpdateRequired));
       sessionStorage.setItem('hmc_moveOrderNum', moveOrderNum);
       sessionStorage.setItem('hmc_customerName', customerName);
+      sessionStorage.setItem('hmc_pickSlipDate', pickSlipDate);
       sessionStorage.setItem('hmc_rawHeaderMatrix', JSON.stringify(rawHeaderMatrix));
       sessionStorage.setItem('hmc_rawFooterRows', JSON.stringify(rawFooterRows));
       sessionStorage.setItem('hmc_originalColWidths', JSON.stringify(originalColWidths));
@@ -1309,6 +1315,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedPlacementUpdateRequired = sessionStorage.getItem('hmc_placementUpdateRequired');
       const savedMo = sessionStorage.getItem('hmc_moveOrderNum');
       const savedCust = sessionStorage.getItem('hmc_customerName');
+      const savedPickSlipDate = sessionStorage.getItem('hmc_pickSlipDate');
       const savedHeader = sessionStorage.getItem('hmc_rawHeaderMatrix');
       const savedFooter = sessionStorage.getItem('hmc_rawFooterRows');
       const savedWidths = sessionStorage.getItem('hmc_originalColWidths');
@@ -1331,6 +1338,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (savedMo) moveOrderNum = savedMo;
       if (savedCust) customerName = savedCust;
       if (savedHeader) rawHeaderMatrix = JSON.parse(savedHeader);
+      pickSlipDate = savedPickSlipDate || getPickSlipDateFromValue(rawHeaderMatrix && rawHeaderMatrix[1] && rawHeaderMatrix[1][9]) || pickSlipDate;
       if (savedFooter) {
         rawFooterRows = JSON.parse(savedFooter);
         // Rebuild the dedicated IR footer after restoring a saved session.
@@ -1370,9 +1378,42 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
 
+    function formatPickSlipDateValue(value, formattedValue = '') {
+      const formatted = String(formattedValue == null ? '' : formattedValue).trim();
+      if (formatted) return formatted;
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return String(value.getDate()).padStart(2, '0') + '/' + String(value.getMonth() + 1).padStart(2, '0') + '/' + value.getFullYear();
+      }
+      if (typeof value === 'number' && Number.isFinite(value) && typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) {
+        const date = XLSX.SSF.parse_date_code(value);
+        if (date && date.y && date.m && date.d) {
+          return String(date.d).padStart(2, '0') + '/' + String(date.m).padStart(2, '0') + '/' + date.y;
+        }
+      }
+      return String(value == null ? '' : value).trim();
+    }
+
+    function getPickSlipDateFromSheet(sheet) {
+      const cell = sheet && sheet.J2;
+      return formatPickSlipDateValue(cell && cell.v, cell && cell.w);
+    }
+
+    function getPickSlipDateFromValue(value) {
+      return formatPickSlipDateValue(value);
+    }
+
+    function setPickSlipDateHeader(value) {
+      const element = document.getElementById('headerPickSlipDate');
+      if (!element) return;
+      const date = String(value == null ? '' : value).trim();
+      element.textContent = date ? 'Pick slip date: ' + date : '';
+      element.hidden = !date;
+    }
+
     function updateHeaderDisplay() {
       document.getElementById('headerTitle').innerText = `MO: ${moveOrderNum}`;
       document.getElementById('headerSubtitle').innerText = `Customer: ${customerName}`;
+      setPickSlipDateHeader(pickSlipDate);
     }
 
     async function clearSessionAndReset() {
@@ -1386,7 +1427,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           'hmc_app_version', 'hmc_pickList', 'hmc_packagingDb', 'hmc_currentIndex',
           'hmc_locationMap', 'hmc_locationMasterRows', 'hmc_locationMasterHeaders',
           'hmc_locationMasterSheetName', 'hmc_pickedPlacementLocation', 'hmc_confirmedPickCount', 'hmc_placementUpdateRequired',
-          'hmc_moveOrderNum', 'hmc_customerName', 'hmc_rawHeaderMatrix',
+          'hmc_moveOrderNum', 'hmc_customerName', 'hmc_pickSlipDate', 'hmc_rawHeaderMatrix',
           'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges', 'hmc_sessionId'
         ].forEach(key => sessionStorage.removeItem(key));
         location.reload();
@@ -2423,6 +2464,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellStyles: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        pickSlipDate = getPickSlipDateFromSheet(sheet);
 
         const d2Cell = sheet['D2'];
         const d2Display = d2Cell ? String(d2Cell.w ?? '').trim() : '';
@@ -4141,6 +4183,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         try { localStorage.setItem(SOURCE_REPORT_KEY,sourceReportBase64); } catch (storageError) { try { localStorage.removeItem(SOURCE_REPORT_KEY); } catch (cleanupError) {} console.warn('The source workbook could not be saved for a later export; keep this tab open or re-upload the picking report before exporting.',storageError); }
         const book=XLSX.read(bytes,{type:'array',cellDates:true});
         const sheet=book.Sheets[book.SheetNames[0]];
+        const pickSlipDate = getPickSlipDateFromSheet(sheet);
         const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false,blankrows:true});
         const headerAt=matrix.findIndex(row=>{
           const hs=row.map(normalizeHeader);
@@ -4169,13 +4212,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           rows.push({code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,quantityColumn:(hasRevisedQuantity?revisedCol:reqCol)+1,remarksColumn:remarksCol>=0?remarksCol+1:0,matched:false,comment:''});
         }
         if(!rows.length) throw new Error('No item rows were found in this report.');
-        session={fileName:file.name,importedAt:new Date().toISOString(),rows,checker:'',checkerIdentity:null,notes:''};
+        session={fileName:file.name,importedAt:new Date().toISOString(),pickSlipDate,rows,checker:'',checkerIdentity:null,notes:''};
         current=0; $('checkerIdentityMethod').value='name';$('checkerIdentityValue').value='';clearCheckerSignature();updateCheckerIdentityMethod();$('checkerIdentitySetup').style.display='flex';$('checkerIdentityValue').focus();
       }catch(error){ $('importStatus').textContent=error.message||String(error); }
     }
     function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
     function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};session.rows.forEach(row=>{if(typeof row.matched!=='boolean'){const checks=row.checks||{};row.matched=LEGACY_FIELD_KEYS.every(key=>checks[key]?.state==='match');const oldNotes=LEGACY_FIELD_KEYS.map(key=>checks[key]?.state==='issue'&&checks[key]?.note?checks[key].note:'').filter(Boolean);if(!row.comment&&oldNotes.length)row.comment=oldNotes.join(' | ');}if(typeof row.comment!=='string')row.comment='';});current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
-    function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
+    function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionPickSlipDate').textContent=session.pickSlipDate?'Pick slip date: '+session.pickSlipDate:'';$('sessionPickSlipDate').dataset.pickSlipDate=session.pickSlipDate||'';setPickSlipDateHeader(session.pickSlipDate);$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
     function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const comments=session.rows.filter(row=>String(row.comment||'').trim()).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=comments;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=comments?`${comments} line${comments===1?' has':'s have'} comments. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
     function isComplete(row){return row.matched===true&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
     function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);$('lineComment').value=row.comment||'';const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('dcPrevBtn').disabled=current===0;$('dcNextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?'CHECKED':'NOT CHECKED';$('matchAllBtn').textContent=row.matched?'✓ All details matched':'✓ Match all details';updateSummary();}
