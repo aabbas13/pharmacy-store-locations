@@ -61,36 +61,48 @@ persisted_data = load_persistent_state()
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
-# Give each browser profile a stable, separate settings key.
-device_id = str(st.query_params.get("device_id", ""))
-device_id_is_valid = bool(re.fullmatch(r"[a-f0-9-]{36}", device_id))
-device_ready = str(st.query_params.get("device_ready", "")) == "1"
-st.components.v1.html("""
-<script>
-  const storageKey = 'store-location-manager-device-id';
-  const url = new URL(window.parent.location.href);
-  const makeDeviceId = () => crypto.randomUUID ? crypto.randomUUID() :
-    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
-  let browserId;
-  try {
-    browserId = localStorage.getItem(storageKey);
-    if (!browserId) browserId = makeDeviceId();
-    localStorage.setItem(storageKey, browserId);
-  } catch (error) {
-    browserId = url.searchParams.get('device_id') || makeDeviceId();
-  }
-  if (url.searchParams.get('device_id') !== browserId ||
-      url.searchParams.get('device_ready') !== '1') {
-    url.searchParams.set('device_id', browserId);
-    url.searchParams.set('device_ready', '1');
-    window.parent.location.replace(url.toString());
-  }
-</script>
-""", height=1)
-if not device_id_is_valid or not device_ready:
+# Give each browser profile a stable, separate settings key. Streamlit v2
+# state sends the browser ID directly to Python without a page reload.
+DEVICE_ID_COMPONENT = st.components.v2.component(
+    name="store_device_identity",
+    html="<span></span>",
+    js="""
+      export default function({ setStateValue }) {
+        const storageKey = 'store-location-manager-device-id';
+        const makeDeviceId = () => window.crypto && crypto.randomUUID ? crypto.randomUUID() :
+          'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+        let browserId;
+        try {
+          browserId = localStorage.getItem(storageKey);
+          if (!browserId) browserId = makeDeviceId();
+          localStorage.setItem(storageKey, browserId);
+        } catch (error) {
+          try {
+            browserId = sessionStorage.getItem(storageKey);
+            if (!browserId) browserId = makeDeviceId();
+            sessionStorage.setItem(storageKey, browserId);
+          } catch (storageError) {
+            browserId = window.__storeLocationDeviceId || makeDeviceId();
+            window.__storeLocationDeviceId = browserId;
+          }
+        }
+        setStateValue("device_id", browserId);
+
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("device_id");
+        cleanUrl.searchParams.delete("device_ready");
+        if (cleanUrl.href !== window.location.href) {
+          window.history.replaceState(window.history.state, "", cleanUrl.toString());
+        }
+      }
+    """,
+)
+device_state = DEVICE_ID_COMPONENT(key="store_device_identity", height=1, width="stretch")
+device_id = getattr(device_state, "device_id", None)
+if not isinstance(device_id, str) or not re.fullmatch(r"[a-f0-9-]{36}", device_id):
     st.info("Preparing this device’s settings…")
     st.stop()
 
