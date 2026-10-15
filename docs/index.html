@@ -638,10 +638,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <h3 style="margin:0 0 6px; color:#3730a3;">☁️ Merge Location &amp; Package Master to Google Sheets</h3>
       <p style="margin:0 0 10px; color:#475569; font-size:.84rem;">The merge first saves dated copies of the current Location and Location Package Master tabs, then applies this report while keeping existing rows.</p>
       <p style="margin:0 0 10px; color:#475569; font-size:.84rem;">Connection is ready. Sign in with the original sheet owner account when prompted.</p>
+      <label for="locationMergeFile" style="display:block; margin:8px 0 4px; font-size:.82rem; font-weight:600; color:#334155;">Optional: select a generated Unified Location &amp; Package Master (.xlsx)</label>
+      <input id="locationMergeFile" type="file" accept=".xlsx,.xls" onchange="updateLocationMergeFileStatus()" style="display:block; max-width:100%; margin-bottom:5px;">
+      <small id="locationMergeFileStatus" style="display:block; margin-bottom:8px; color:#64748b; font-size:.75rem;">No file selected. Without a file, the merge uses the current data in this picking session.</small>
       <div style="display:flex; gap:8px; margin-top:9px; flex-wrap:wrap;">
         <button type="button" class="start-btn" onclick="mergeLocationPackageMasterToSheet()" style="margin:0;">🔐 Verify owner &amp; merge to sheet</button>
-      </div>
-      <p id="locationMergeStatus" role="status" style="margin:8px 0 0; font-size:.78rem; color:#475569;">Endpoint configured. The merge will create dated backups before updating the Sheet.</p>
+      </div>      <p id="locationMergeStatus" role="status" style="margin:8px 0 0; font-size:.78rem; color:#475569;">Endpoint configured. The merge will create dated backups before updating the Sheet.</p>
     </section>
     <button class="reset-btn" onclick="clearSessionAndReset()">🗑️ Clear Session & Start Fresh</button>
   </div>
@@ -4194,33 +4196,85 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     const LOCATION_MERGE_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyUjnx-qCnlWy4cl6lGC0aFekKN2zUvm6ljz05Z3smUKLTwn4BblSK1KlAMK4OfLy0U8A/exec';
-    function mergeLocationPackageMasterToSheet() {
+    function updateLocationMergeFileStatus() {
+      const file = document.getElementById('locationMergeFile')?.files?.[0];
+      const note = document.getElementById('locationMergeFileStatus');
+      if (note) note.textContent = file
+        ? `Selected ${file.name}. The helper will read the unified table locally before sending it for owner verification.`
+        : 'No file selected. Without a file, the merge uses the current data in this picking session.';
+    }
+
+    function canonicalMergeHeader(value) {
+      const key = String(value == null ? '' : value).trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (['item', 'itemcode', 'itemnumber', 'code'].includes(key)) return 'itemnumber';
+      if (['itemdescription', 'description', 'name'].includes(key)) return 'itemdescription';
+      if (['parentlot', 'parentlotbrand', 'parentlotnumber', 'brand', 'brandname'].includes(key)) return 'parentlot';
+      if (['location', 'storelocation', 'binlocation', 'bin', 'locator', 'masterlocationitemlevel'].includes(key)) return 'location';
+      return key;
+    }
+
+    async function readUploadedLocationPackageReport(file) {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+      for (const sheetName of workbook.SheetNames) {
+        const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false });
+        for (let headerRow = 0; headerRow < Math.min(matrix.length, 30); headerRow++) {
+          const headers = (matrix[headerRow] || []).map(value => String(value == null ? '' : value).trim());
+          const canonical = headers.map(canonicalMergeHeader);
+          if (!canonical.includes('itemnumber') || !canonical.includes('location') ||
+              !canonical.includes('itemdescription') || !canonical.includes('parentlot')) continue;
+          const codeColumn = canonical.indexOf('itemnumber');
+          const records = matrix.slice(headerRow + 1)
+            .filter(row => row && String(row[codeColumn] == null ? '' : row[codeColumn]).trim() !== '')
+            .map(row => Object.fromEntries(headers.map((header, index) => [header || `Column ${index + 1}`, row[index] == null ? '' : row[index]])));
+          if (!records.length) throw new Error(`The matching table in “${sheetName}” has headers but no item rows.`);
+          return { sheetName, headers, records };
+        }
+      }
+      throw new Error('No worksheet has the required Item Number, Item Description, Parent Lot (Brand), and Location columns. Export the Unified Location & Package Master from the helper, then select that .xlsx file.');
+    }
+
+    async function mergeLocationPackageMasterToSheet() {
       const endpoint = LOCATION_MERGE_ENDPOINT;
       const status = document.getElementById('locationMergeStatus');
+      const setStatus = (message, color) => { status.textContent = message; status.style.color = color; };
       if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec(?:\?.*)?$/.test(endpoint)) {
-        status.textContent = 'The merge endpoint is not configured. Reload the helper and try again.';
-        status.style.color = '#b42318';
+        setStatus('The merge endpoint is not configured. Reload the helper and try again.', '#b42318');
         return;
       }
-      if (!locationMasterRows.length || !locationMasterHeaders.length) {
-        status.textContent = 'Load the current Google Sheet Location Master first, then retry.';
-        status.style.color = '#b42318';
+
+      let locationHeaders, locationRows, packageRows, sourceDescription;
+      try {
+        const selectedFile = document.getElementById('locationMergeFile')?.files?.[0];
+        if (selectedFile) {
+          setStatus(`Reading ${selectedFile.name} in this browser…`, '#3730a3');
+          const imported = await readUploadedLocationPackageReport(selectedFile);
+          locationHeaders = imported.headers;
+          locationRows = imported.records;
+          packageRows = imported.records;
+          sourceDescription = `${selectedFile.name} — sheet “${imported.sheetName}”`;
+        } else {
+          if (!locationMasterRows.length || !locationMasterHeaders.length) throw new Error('Load the current Google Sheet Location Master first, or select a generated Unified Location & Package Master .xlsx file.');
+          locationHeaders = locationMasterHeaders;
+          locationRows = buildUpdatedLocationExportRows();
+          packageRows = buildUnifiedLocationPackageRows();
+          sourceDescription = 'current picking session';
+        }
+      } catch (error) {
+        setStatus(error.message || String(error), '#b42318');
         return;
       }
-      const locationRows = buildUpdatedLocationExportRows();
-      const packageRows = buildUnifiedLocationPackageRows();
+
       if (!locationRows.length || !packageRows.length) {
-        status.textContent = 'The generated report needs both location rows and package rows before it can be merged.';
-        status.style.color = '#b42318';
+        setStatus('The selected source needs both location rows and package rows before it can be merged.', '#b42318');
         return;
       }
-      const summary = `${locationRows.length.toLocaleString()} location rows and ${packageRows.length.toLocaleString()} package rows`;
+      const summary = `${locationRows.length.toLocaleString()} location rows and ${packageRows.length.toLocaleString()} package rows from ${sourceDescription}`;
       if (!confirm(`Continue with ${summary}? The current Google Sheet tabs will first be copied to dated “Previous” tabs. Only the original sheet owner’s Google account can approve the write.`)) return;
       const payload = {
         version: 1,
         generatedAt: new Date().toISOString(),
         locationSheetName: locationMasterSheetName || 'Locations',
-        locationHeaders: locationMasterHeaders,
+        locationHeaders,
         locations: locationRows,
         packages: packageRows
       };
@@ -4235,12 +4289,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       input.value = JSON.stringify(payload);
       form.appendChild(input);
       document.body.appendChild(form);
-      status.textContent = `Opening Google sign-in and sending ${summary} for owner verification…`;
-      status.style.color = '#3730a3';
+      setStatus(`Opening Google sign-in and sending ${summary} for owner verification…`, '#3730a3');
       form.submit();
       form.remove();
     }
-
     function exportUnifiedMasterExcel() {
       const exportData = buildUnifiedLocationPackageRows();
       if (!exportData.length) {
