@@ -1,4 +1,5 @@
 import json
+import html
 import requests
 import firebase_admin
 from firebase_admin import auth as firebase_auth
@@ -64,6 +65,39 @@ persisted_data = load_persistent_state()
 
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
+
+# Keep Firebase's refresh token in this browser tab so a page reload can restore
+# the signed-in session. Passwords and ID tokens are never written to storage.
+AUTH_SESSION_COMPONENT = st.components.v2.component(
+    name="store_auth_session_persistence",
+    html="<span></span>",
+    js="""
+      export default function({ data, setStateValue }) {
+        const key = "store-locations-firebase-session";
+        let saved = {};
+        try {
+          if (data?.clear) {
+            window.sessionStorage.removeItem(key);
+          } else if (data?.refresh_token) {
+            saved = {
+              refresh_token: data.refresh_token,
+              email: data.email || "",
+              role: data.role || "store"
+            };
+            window.sessionStorage.setItem(key, JSON.stringify(saved));
+          } else {
+            saved = JSON.parse(window.sessionStorage.getItem(key) || "{}");
+          }
+        } catch (error) {
+          saved = {};
+        }
+        setStateValue("ready", true);
+        setStateValue("refresh_token", saved.refresh_token || "");
+        setStateValue("email", saved.email || "");
+        setStateValue("role", saved.role || "store");
+      }
+    """,
+)
 
 
 # --- INDIVIDUAL FIREBASE AUTHENTICATION ---
@@ -138,6 +172,92 @@ def queue_password_change(result: dict, email: str) -> None:
     st.session_state["password_change_email"] = email
 
 
+def restore_browser_auth_session() -> None:
+    clear_requested = bool(st.session_state.pop("_clear_browser_auth", False))
+    if clear_requested:
+        auth_data = {"clear": True}
+    elif st.session_state.get("password_change_refresh_token"):
+        auth_data = {
+            "refresh_token": st.session_state["password_change_refresh_token"],
+            "email": st.session_state.get("password_change_email", ""),
+            "role": "password_change",
+        }
+    elif st.session_state.get("store_admin_refresh_token"):
+        auth_data = {
+            "refresh_token": st.session_state["store_admin_refresh_token"],
+            "email": st.session_state.get("store_admin_email", ""),
+            "role": "admin",
+        }
+    else:
+        auth_data = {
+            "refresh_token": st.session_state.get("store_locations_refresh_token", ""),
+            "email": st.session_state.get("store_locations_email", ""),
+            "role": "store",
+        }
+
+    browser_auth = AUTH_SESSION_COMPONENT(
+        data=auth_data,
+        default={"ready": False, "refresh_token": "", "email": "", "role": "store"},
+        key="store_auth_session",
+        height=1,
+        width="stretch",
+    )
+    if clear_requested:
+        clear_firebase_session()
+        return
+
+    if not getattr(browser_auth, "ready", False):
+        st.info("Restoring your sign-in…")
+        st.stop()
+
+    if any(st.session_state.get(key) for key in (
+        "password_change_id_token",
+        "store_admin_id_token",
+        "store_locations_id_token",
+    )):
+        return
+
+    refresh_token = getattr(browser_auth, "refresh_token", "")
+    role = getattr(browser_auth, "role", "store")
+    email = getattr(browser_auth, "email", "")
+    if not refresh_token:
+        return
+
+    try:
+        refreshed = refresh_firebase_id_token(refresh_token)
+        app = get_firebase_admin_app()
+        decoded = firebase_auth.verify_id_token(
+            refreshed["id_token"], check_revoked=True, app=app
+        )
+        if role == "password_change" and decoded.get("must_change_password", False):
+            queue_password_change(refreshed, decoded.get("email", email))
+            st.rerun()
+        elif role == "admin" and decoded.get("store_admin", False):
+            st.session_state["store_admin_id_token"] = refreshed["id_token"]
+            st.session_state["store_admin_refresh_token"] = refreshed.get(
+                "refresh_token", refresh_token
+            )
+            st.session_state["store_admin_email"] = decoded.get("email", email)
+            st.session_state.pop("show_user_management_login", None)
+            st.rerun()
+        elif role == "store" and decoded.get("mobile_app", False):
+            st.session_state["store_locations_id_token"] = refreshed["id_token"]
+            st.session_state["store_locations_refresh_token"] = refreshed.get(
+                "refresh_token", refresh_token
+            )
+            st.session_state["store_locations_email"] = decoded.get("email", email)
+            st.rerun()
+        else:
+            st.session_state["_clear_browser_auth"] = True
+    except (
+        requests.RequestException,
+        KeyError,
+        ValueError,
+        firebase_admin.exceptions.FirebaseError,
+    ):
+        st.session_state["_clear_browser_auth"] = True
+
+
 def show_required_password_change() -> bool:
     token = st.session_state.get("password_change_id_token")
     if not token:
@@ -185,6 +305,7 @@ def show_required_password_change() -> bool:
                     "store_admin_email",
                 ):
                     st.session_state.pop(key, None)
+                st.session_state["_clear_browser_auth"] = True
                 st.session_state["password_changed_notice"] = True
                 st.rerun()
             except (
@@ -356,10 +477,12 @@ def render_user_management() -> None:
         for key in ("store_admin_id_token", "store_admin_refresh_token", "store_admin_email"):
             st.session_state.pop(key, None)
         st.session_state.pop("show_user_management_login", None)
+        st.session_state["_clear_browser_auth"] = True
         st.rerun()
     if col_back.button("Back to app sign in", use_container_width=True):
         for key in ("store_admin_id_token", "store_admin_refresh_token", "store_admin_email"):
             st.session_state.pop(key, None)
+        st.session_state["_clear_browser_auth"] = True
         st.rerun()
 
     st.subheader("Add a storekeeper")
@@ -561,6 +684,8 @@ def require_firebase_user() -> None:
         st.stop()
 
 
+restore_browser_auth_session()
+
 if show_required_password_change():
     st.stop()
 if not route_user_management():
@@ -568,6 +693,7 @@ if not route_user_management():
     st.sidebar.caption(f"Signed in: {st.session_state.get('store_locations_email', '')}")
     if st.sidebar.button("Sign out", key="store_locations_sign_out"):
         clear_firebase_session()
+        st.session_state["_clear_browser_auth"] = True
         st.rerun()
 
 # Give each browser profile a stable, separate settings key. Streamlit v2
@@ -1462,6 +1588,38 @@ else:
 
         def retreat_vertical():
             move_bin_vertical("previous", start_row, max_row, max_col_val)
+
+    active_bin_display = html.escape(target_bin_location or "Select a bin in Bin settings")
+    active_bin_class = "active" if all_fields_filled else "incomplete"
+    st.markdown(
+        f"""
+        <style>
+          .bin-location-float {{
+            position: fixed;
+            top: calc(3.4rem + env(safe-area-inset-top, 0px));
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(680px, calc(100vw - 1rem));
+            box-sizing: border-box;
+            padding: .65rem .9rem;
+            border-radius: .75rem;
+            color: #fff;
+            background: #155e75;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, .24);
+            text-align: center;
+            font-size: 1rem;
+            line-height: 1.3;
+            z-index: 999999;
+          }}
+          .bin-location-float.incomplete {{ background: #92400e; }}
+          .bin-location-float strong {{ font-size: 1.15rem; letter-spacing: .04em; }}
+        </style>
+        <div class="bin-location-float {active_bin_class}" role="status">
+          📍 Active bin: <strong>{active_bin_display}</strong>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     row_fmt_info = get_row_format(start_row, max_row)
 
