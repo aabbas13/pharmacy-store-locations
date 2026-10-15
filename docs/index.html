@@ -291,6 +291,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     #storeAppsAuthCard h1 { font-size: 1.35rem; margin-bottom: 8px; }
     #storeAppsAuthCard p { color: var(--muted); margin-bottom: 18px; }
     #storeAppsAuthCard input { margin-bottom: 12px; }
+    #storeAppsAuthCard form[hidden] { display: none !important; }
+    #storeAppsPasswordChangeForm h2 { font-size: 1.05rem; margin: 0 0 8px; }
+    #storeAppsPasswordChangeForm p { margin-bottom: 14px; }
+    #storeAppsPasswordChangeForm button {
+      width: 100%; padding: 12px; border: 0; border-radius: 8px; color: white;
+      background: var(--primary); font-size: 1rem; font-weight: 700;
+    }
     #storeAppsLoginButton {
       width: 100%; padding: 12px; border: 0; border-radius: 8px; color: white;
       background: var(--primary); font-size: 1rem; font-weight: 700;
@@ -310,6 +317,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <label for="storeAppsPassword">Password</label>
         <input id="storeAppsPassword" type="password" autocomplete="current-password" required>
         <button id="storeAppsLoginButton" type="submit">Sign in</button>
+      </form>
+      <form id="storeAppsPasswordChangeForm" hidden>
+        <h2>Change your temporary password</h2>
+        <p>Set a new password to continue in Picker.</p>
+        <label for="storeAppsNewPassword">New password</label>
+        <input id="storeAppsNewPassword" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="storeAppsConfirmPassword">Confirm new password</label>
+        <input id="storeAppsConfirmPassword" type="password" autocomplete="new-password" minlength="8" required>
+        <button id="storeAppsPasswordChangeButton" type="submit">Change password</button>
       </form>
       <div id="storeAppsAuthError" role="alert"></div>
     </div>
@@ -4419,11 +4435,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   <script>
     (function () {
       const gate = document.getElementById("storeAppsAuthGate");
-      const form = document.getElementById("storeAppsLoginForm");
-      const button = document.getElementById("storeAppsLoginButton");
+      const loginForm = document.getElementById("storeAppsLoginForm");
+      const passwordChangeForm = document.getElementById("storeAppsPasswordChangeForm");
+      const loginButton = document.getElementById("storeAppsLoginButton");
+      const changeButton = document.getElementById("storeAppsPasswordChangeButton");
       const message = document.getElementById("storeAppsAuthError");
       const storeMobileAppUrl = "https://pharmacy-store-locations-qr8hwwliwm9mjtsbawknrc.streamlit.app/";
-      let mustChangeTemporaryPassword = false;
       const appSessionKeys = [
         "hmc_app_version", "hmc_pickList", "hmc_packagingDb", "hmc_currentIndex",
         "hmc_locationMap", "hmc_moveOrderNum", "hmc_customerName", "hmc_rawHeaderMatrix",
@@ -4435,19 +4452,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         sessionStorage.removeItem("hmc_auth_uid");
       }
 
-      function showError(text) {
-        message.textContent = text;
+      function showError(text, includeMobileFallback = false) {
+        message.replaceChildren(document.createTextNode(text));
+        if (includeMobileFallback) {
+          message.appendChild(document.createTextNode(" "));
+          const link = document.createElement("a");
+          link.href = storeMobileAppUrl;
+          link.textContent = "Change it in Store Locations instead";
+          link.rel = "noopener noreferrer";
+          message.appendChild(link);
+        }
       }
 
-      function showPasswordChangeRequired() {
-        message.replaceChildren(
-          document.createTextNode("This temporary password must be changed before you can use the Picker. Sign in to the Store Locations app first: ")
-        );
-        const link = document.createElement("a");
-        link.href = storeMobileAppUrl;
-        link.textContent = "Change password";
-        link.rel = "noopener noreferrer";
-        message.appendChild(link);
+      function passwordChangedOnThisDevice(uid) {
+        return localStorage.getItem(`hmc_picker_password_changed_${uid}`) === "1";
+      }
+
+      function setLoginMode() {
+        loginForm.hidden = false;
+        passwordChangeForm.hidden = true;
+      }
+
+      function setPasswordChangeMode() {
+        loginForm.hidden = true;
+        passwordChangeForm.hidden = false;
+        document.getElementById("storeAppsNewPassword").focus();
+        showError("This temporary password must be changed before you can use Picker.");
+      }
+
+      function unlockPicker(user) {
+        const priorUid = sessionStorage.getItem("hmc_auth_uid");
+        if (priorUid && priorUid !== user.uid) clearPickingSession();
+        sessionStorage.setItem("hmc_auth_uid", user.uid);
+        passwordChangeForm.hidden = true;
+        gate.hidden = true;
+        document.documentElement.classList.remove("auth-locked");
+        if (!document.getElementById("storeAppsSignOut")) {
+          const signOut = document.createElement("button");
+          signOut.id = "storeAppsSignOut";
+          signOut.className = "header-btn";
+          signOut.type = "button";
+          signOut.textContent = "Sign out";
+          signOut.addEventListener("click", async () => {
+            clearPickingSession();
+            await auth.signOut();
+          });
+          document.querySelector(".header-actions")?.appendChild(signOut);
+        }
       }
 
       const config = window.STORE_APPS_FIREBASE_CONFIG;
@@ -4462,74 +4513,92 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const auth = firebase.auth();
         let deniedAccess = false;
         auth.setPersistence(firebase.auth.Auth.Persistence.SESSION).then(() => {
-          auth.onAuthStateChanged((user) => {
+          auth.onAuthStateChanged(async (user) => {
             if (!user) {
               document.documentElement.classList.add("auth-locked");
               gate.hidden = false;
               document.getElementById("storeAppsSignOut")?.remove();
-              if (mustChangeTemporaryPassword) {
-                showPasswordChangeRequired();
-              } else if (deniedAccess) {
-                showError("Your account does not have access to the HTML helper. Contact the administrator.");
+              setLoginMode();
+              if (deniedAccess) {
+                showError("Your account does not have access to the Picker HTML app. Contact the administrator.");
                 deniedAccess = false;
               }
               return;
             }
 
-            user.getIdTokenResult().then((tokenResult) => {
-              if (tokenResult.claims.must_change_password) {
-                mustChangeTemporaryPassword = true;
-                clearPickingSession();
-                auth.signOut();
-                return;
-              }
-
+            try {
+              const tokenResult = await user.getIdTokenResult();
               if (!tokenResult.claims.picking_helper) {
                 deniedAccess = true;
                 clearPickingSession();
-                auth.signOut();
+                await auth.signOut();
                 return;
               }
-
-              const priorUid = sessionStorage.getItem("hmc_auth_uid");
-              if (priorUid && priorUid !== user.uid) clearPickingSession();
-              sessionStorage.setItem("hmc_auth_uid", user.uid);
-              gate.hidden = true;
-              document.documentElement.classList.remove("auth-locked");
-
-              if (!document.getElementById("storeAppsSignOut")) {
-                const signOut = document.createElement("button");
-                signOut.id = "storeAppsSignOut";
-                signOut.className = "header-btn";
-                signOut.type = "button";
-                signOut.textContent = "Sign out";
-                signOut.addEventListener("click", async () => {
-                  clearPickingSession();
-                  await auth.signOut();
-                });
-                document.querySelector(".header-actions")?.appendChild(signOut);
+              if (tokenResult.claims.must_change_password && !passwordChangedOnThisDevice(user.uid)) {
+                clearPickingSession();
+                gate.hidden = false;
+                document.documentElement.classList.add("auth-locked");
+                setPasswordChangeMode();
+                return;
               }
-            }).catch(() => {
+              unlockPicker(user);
+            } catch (error) {
               showError("Could not verify account access. Connect to the internet and sign in again.");
-              auth.signOut();
-            });
+              await auth.signOut();
+            }
           });
-        }).catch(() => showError("Could not initialize sign-in. Contact the app administrator."));
+        }).catch(() => showError("Could not initialize sign-in. Contact the administrator."));
 
-        form.addEventListener("submit", async (event) => {
+        loginForm.addEventListener("submit", async (event) => {
           event.preventDefault();
-          button.disabled = true;
+          loginButton.disabled = true;
           showError("");
           try {
             await auth.signInWithEmailAndPassword(
               document.getElementById("storeAppsEmail").value.trim(),
               document.getElementById("storeAppsPassword").value
             );
-            form.reset();
+            loginForm.reset();
           } catch (error) {
             showError("Sign-in failed. Check your email and password or contact the administrator.");
           } finally {
-            button.disabled = false;
+            loginButton.disabled = false;
+          }
+        });
+
+        passwordChangeForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const newPassword = document.getElementById("storeAppsNewPassword").value;
+          const confirmPassword = document.getElementById("storeAppsConfirmPassword").value;
+          if (newPassword.length < 8) {
+            showError("Use a password with at least 8 characters.");
+            return;
+          }
+          if (newPassword !== confirmPassword) {
+            showError("The passwords do not match.");
+            return;
+          }
+          const user = auth.currentUser;
+          if (!user) {
+            setLoginMode();
+            showError("Your sign-in expired. Sign in again.");
+            return;
+          }
+          changeButton.disabled = true;
+          showError("Updating your password…");
+          try {
+            await user.updatePassword(newPassword);
+            localStorage.setItem(`hmc_picker_password_changed_${user.uid}`, "1");
+            passwordChangeForm.reset();
+            unlockPicker(user);
+          } catch (error) {
+            console.error("Picker first-password change failed:", error);
+            const detail = error && error.code === "auth/requires-recent-login"
+              ? "Your sign-in expired. Sign in again with your temporary password, then change it."
+              : "Could not change the password. Check the password and internet connection.";
+            showError(detail, true);
+          } finally {
+            changeButton.disabled = false;
           }
         });
       } catch (error) {

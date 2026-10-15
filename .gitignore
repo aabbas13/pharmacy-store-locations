@@ -7,3 +7,6 @@ __pycache__/
 *.pyc
 *.exe
 .device_settings/
+
+functions/node_modules/
+.firebase/
