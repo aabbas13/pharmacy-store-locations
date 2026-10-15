@@ -1,4 +1,5 @@
 import json
+import hmac
 import os
 import re
 import urllib.parse
@@ -60,6 +61,44 @@ persisted_data = load_persistent_state()
 
 # --- PAGE CONFIG & STYLING ---
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
+
+
+def require_shared_account_login() -> None:
+    """Stop before app content unless the shared account is authenticated."""
+    try:
+        auth = st.secrets["app_auth"]
+        expected_username = str(auth["username"])
+        expected_password = str(auth["password"])
+    except Exception:
+        st.title("Store Locations Login")
+        st.error("App login is not configured. Add the [app_auth] values in Streamlit Cloud Secrets.")
+        st.stop()
+
+    if st.session_state.get("app_authenticated"):
+        with st.sidebar:
+            if st.button("Log out", use_container_width=True):
+                st.session_state.pop("app_authenticated", None)
+                st.rerun()
+        return
+
+    st.title("Store Locations Login")
+    with st.form("shared_account_login"):
+        username = st.text_input("Username", autocomplete="username")
+        password = st.text_input("Password", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
+
+    if submitted:
+        username_ok = hmac.compare_digest(username.strip(), expected_username)
+        password_ok = hmac.compare_digest(password, expected_password)
+        if username_ok and password_ok:
+            st.session_state.app_authenticated = True
+            st.rerun()
+        st.error("Incorrect username or password.")
+
+    st.stop()
+
+
+require_shared_account_login()
 
 # Give each browser profile a stable, separate settings key. Streamlit v2
 # state sends the browser ID directly to Python without a page reload.
