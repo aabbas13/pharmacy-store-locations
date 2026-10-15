@@ -198,6 +198,10 @@ def restore_browser_auth_session() -> None:
     browser_auth = AUTH_SESSION_COMPONENT(
         data=auth_data,
         default={"ready": False, "refresh_token": "", "email": "", "role": "store"},
+        on_ready_change=lambda: None,
+        on_refresh_token_change=lambda: None,
+        on_email_change=lambda: None,
+        on_role_change=lambda: None,
         key="store_auth_session",
         height=1,
         width="stretch",
