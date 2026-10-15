@@ -1,5 +1,8 @@
 import json
-import hmac
+import requests
+import firebase_admin
+from firebase_admin import auth as firebase_auth
+from firebase_admin import credentials as firebase_credentials
 import os
 import re
 import urllib.parse
@@ -63,42 +66,152 @@ persisted_data = load_persistent_state()
 st.set_page_config(page_title="Pharmacy Store Locations", layout="centered")
 
 
-def require_shared_account_login() -> None:
-    """Stop before app content unless the shared account is authenticated."""
+# --- INDIVIDUAL FIREBASE AUTHENTICATION ---
+def firebase_settings():
     try:
-        auth = st.secrets["app_auth"]
-        expected_username = str(auth["username"])
-        expected_password = str(auth["password"])
-    except Exception:
-        st.title("Store Locations Login")
-        st.error("App login is not configured. Add the [app_auth] values in Streamlit Cloud Secrets.")
+        return (
+            str(st.secrets["firebase"]["web_api_key"]),
+            str(st.secrets["firebase"]["project_id"]),
+            dict(st.secrets["firebase_admin"]),
+        )
+    except (KeyError, TypeError):
+        st.error(
+            "Firebase sign-in is not configured. Add the [firebase] and "
+            "[firebase_admin] sections to Streamlit Cloud Secrets."
+        )
         st.stop()
 
-    if st.session_state.get("app_authenticated"):
-        with st.sidebar:
-            if st.button("Log out", use_container_width=True):
-                st.session_state.pop("app_authenticated", None)
-                st.rerun()
+
+@st.cache_resource
+def get_firebase_admin_app():
+    _, project_id, service_account = firebase_settings()
+    try:
+        return firebase_admin.get_app("store_locations_auth")
+    except ValueError:
+        credential = firebase_credentials.Certificate(service_account)
+        return firebase_admin.initialize_app(
+            credential,
+            options={"projectId": project_id},
+            name="store_locations_auth",
+        )
+
+
+def firebase_sign_in(email: str, password: str) -> dict:
+    web_api_key, _, _ = firebase_settings()
+    response = requests.post(
+        "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword",
+        params={"key": web_api_key},
+        json={"email": email, "password": password, "returnSecureToken": True},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def refresh_firebase_id_token(refresh_token: str) -> dict:
+    web_api_key, _, _ = firebase_settings()
+    response = requests.post(
+        "https://securetoken.googleapis.com/v1/token",
+        params={"key": web_api_key},
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def clear_firebase_session() -> None:
+    for key in (
+        "store_locations_id_token",
+        "store_locations_refresh_token",
+        "store_locations_email",
+    ):
+        st.session_state.pop(key, None)
+
+
+def show_firebase_login(message: str = "") -> None:
+    st.title("🔐 Store Locations Sign In")
+    if message:
+        st.info(message)
+    with st.form("store_locations_login_form"):
+        email = st.text_input("Email", autocomplete="username")
+        password = st.text_input(
+            "Password", type="password", autocomplete="current-password"
+        )
+        submitted = st.form_submit_button(
+            "Sign in", type="primary", use_container_width=True
+        )
+    if not submitted:
         return
 
-    st.title("Store Locations Login")
-    with st.form("shared_account_login"):
-        username = st.text_input("Username", autocomplete="username")
-        password = st.text_input("Password", type="password", autocomplete="current-password")
-        submitted = st.form_submit_button("Log in", type="primary", use_container_width=True)
+    try:
+        result = firebase_sign_in(email.strip(), password)
+        app = get_firebase_admin_app()
+        decoded = firebase_auth.verify_id_token(
+            result["idToken"], check_revoked=True, app=app
+        )
+        if not decoded.get("mobile_app", False):
+            st.error("This account is not enabled for the mobile app. Contact the administrator.")
+            return
+        st.session_state["store_locations_id_token"] = result["idToken"]
+        st.session_state["store_locations_refresh_token"] = result["refreshToken"]
+        st.session_state["store_locations_email"] = decoded.get("email", email.strip())
+        st.rerun()
+    except (
+        requests.RequestException,
+        KeyError,
+        ValueError,
+        firebase_admin.exceptions.FirebaseError,
+    ):
+        st.error("Sign-in failed. Check your email and password, or contact the administrator.")
 
-    if submitted:
-        username_ok = hmac.compare_digest(username.strip(), expected_username)
-        password_ok = hmac.compare_digest(password, expected_password)
-        if username_ok and password_ok:
-            st.session_state.app_authenticated = True
-            st.rerun()
-        st.error("Incorrect username or password.")
 
-    st.stop()
+def require_firebase_user() -> None:
+    token = st.session_state.get("store_locations_id_token")
+    if not token:
+        show_firebase_login()
+        st.stop()
+
+    try:
+        app = get_firebase_admin_app()
+        decoded = firebase_auth.verify_id_token(token, check_revoked=True, app=app)
+    except firebase_auth.ExpiredIdTokenError:
+        try:
+            refreshed = refresh_firebase_id_token(
+                st.session_state["store_locations_refresh_token"]
+            )
+            decoded = firebase_auth.verify_id_token(
+                refreshed["id_token"], check_revoked=True, app=get_firebase_admin_app()
+            )
+            st.session_state["store_locations_id_token"] = refreshed["id_token"]
+            if refreshed.get("refresh_token"):
+                st.session_state["store_locations_refresh_token"] = refreshed["refresh_token"]
+        except (
+            requests.RequestException,
+            KeyError,
+            firebase_admin.exceptions.FirebaseError,
+        ):
+            clear_firebase_session()
+            show_firebase_login("Your sign-in expired. Please sign in again.")
+            st.stop()
+    except firebase_admin.exceptions.FirebaseError:
+        clear_firebase_session()
+        show_firebase_login("Your access is no longer active. Please sign in again.")
+        st.stop()
+
+    if not decoded.get("mobile_app", False):
+        clear_firebase_session()
+        st.title("🔐 Store Locations Sign In")
+        st.error("This account is not enabled for the mobile app. Contact the administrator.")
+        st.stop()
 
 
-require_shared_account_login()
+require_firebase_user()
+st.sidebar.caption(f"Signed in: {st.session_state.get('store_locations_email', '')}")
+if st.sidebar.button("Sign out", key="store_locations_sign_out"):
+    clear_firebase_session()
+    st.rerun()
+
 
 # Give each browser profile a stable, separate settings key. Streamlit v2
 # state sends the browser ID directly to Python without a page reload.
