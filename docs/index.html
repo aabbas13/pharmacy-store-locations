@@ -570,6 +570,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button class="export-btn" onclick="openFinalReportSortModal()">📥 Export Confirmed Pick Slip Excel</button>
     <button class="export-loc-btn" onclick="exportLocationDatabaseExcel()">📍 Export Updated Location File</button>
     <button class="export-pkg-btn" onclick="exportUnifiedMasterExcel()">📍📦 Export Unified Location &amp; Package Master</button>
+    <section class="card" style="margin-top:10px; border:1px solid #c7d2fe; background:#f8faff;">
+      <h3 style="margin:0 0 6px; color:#3730a3;">☁️ Merge Location &amp; Package Master to Google Sheets</h3>
+      <p style="margin:0 0 10px; color:#475569; font-size:.84rem;">Sign in with the original sheet owner’s Google account. The merge first saves dated copies of the current Location and Location Package Master tabs, then applies this report while keeping existing rows.</p>
+      <label for="locationMergeEndpoint">Google Apps Script merge URL</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input id="locationMergeEndpoint" type="url" placeholder="Paste the deployed merge web app URL" autocomplete="url" style="flex:1; min-width:220px;">
+        <button type="button" class="secondary" onclick="saveLocationMergeEndpoint()" style="width:auto;">Save URL</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:9px; flex-wrap:wrap;">
+        <button type="button" class="start-btn" onclick="mergeLocationPackageMasterToSheet()" style="margin:0;">🔐 Verify owner &amp; merge to sheet</button>
+      </div>
+      <p id="locationMergeStatus" role="status" style="margin:8px 0 0; font-size:.78rem; color:#475569;">Set up the owner-only Google Apps Script merge endpoint once before using this action.</p>
+    </section>
     <button class="reset-btn" onclick="clearSessionAndReset()">🗑️ Clear Session & Start Fresh</button>
   </div>
 
@@ -4091,7 +4104,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     // One master row per item + description + parent lot (brand); item location repeats on each package variant.
-    function exportUnifiedMasterExcel() {
+    function buildUnifiedLocationPackageRows() {
       const sourceConfigs = Object.values(packagingDb);
       const expandedConfigs = sourceConfigs.flatMap(config => {
         if (config.parentLot) return [config];
@@ -4106,12 +4119,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         configsByIdentity.set(packageConfigKey(config.code, config.name, config.parentLot), config);
       });
       const configs = [...configsByIdentity.values()];
-      if (!configs.length) {
-        alert('No package configurations have been saved or imported yet.');
-        return;
-      }
-
-      const exportData = configs.map(config => ({
+      return configs.map(config => ({
         'Item Number': config.code,
         'Item Description': config.name,
         'Parent Lot (Brand)': config.parentLot || '',
@@ -4123,6 +4131,81 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       })).sort((a, b) => String(a['Item Number']).localeCompare(String(b['Item Number'])) ||
         String(a['Item Description']).localeCompare(String(b['Item Description'])) ||
         String(a['Parent Lot (Brand)']).localeCompare(String(b['Parent Lot (Brand)'])));
+    }
+
+    const LOCATION_MERGE_ENDPOINT_KEY = 'hmc_location_master_merge_endpoint_v1';
+    function saveLocationMergeEndpoint() {
+      const input = document.getElementById('locationMergeEndpoint');
+      const value = String(input.value || '').trim();
+      const status = document.getElementById('locationMergeStatus');
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec(?:\?.*)?$/.test(value)) {
+        status.textContent = 'Paste the deployed Google Apps Script web app URL ending in /exec.';
+        status.style.color = '#b42318';
+        return;
+      }
+      localStorage.setItem(LOCATION_MERGE_ENDPOINT_KEY, value);
+      status.textContent = 'Merge URL saved on this device. The endpoint will verify the signed-in Google account before writing.';
+      status.style.color = '#167344';
+    }
+
+    function restoreLocationMergeEndpoint() {
+      try { document.getElementById('locationMergeEndpoint').value = localStorage.getItem(LOCATION_MERGE_ENDPOINT_KEY) || ''; } catch (error) {}
+    }
+    restoreLocationMergeEndpoint();
+
+    function mergeLocationPackageMasterToSheet() {
+      const endpoint = String(document.getElementById('locationMergeEndpoint').value || '').trim();
+      const status = document.getElementById('locationMergeStatus');
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec(?:\?.*)?$/.test(endpoint)) {
+        status.textContent = 'Save a valid Google Apps Script web app URL first.';
+        status.style.color = '#b42318';
+        return;
+      }
+      if (!locationMasterRows.length || !locationMasterHeaders.length) {
+        status.textContent = 'Load the current Google Sheet Location Master first, then retry.';
+        status.style.color = '#b42318';
+        return;
+      }
+      const locationRows = buildUpdatedLocationExportRows();
+      const packageRows = buildUnifiedLocationPackageRows();
+      if (!locationRows.length || !packageRows.length) {
+        status.textContent = 'The generated report needs both location rows and package rows before it can be merged.';
+        status.style.color = '#b42318';
+        return;
+      }
+      const summary = `${locationRows.length.toLocaleString()} location rows and ${packageRows.length.toLocaleString()} package rows`;
+      if (!confirm(`Continue with ${summary}? The current Google Sheet tabs will first be copied to dated “Previous” tabs. Only the original sheet owner’s Google account can approve the write.`)) return;
+      const payload = {
+        version: 1,
+        generatedAt: new Date().toISOString(),
+        locationSheetName: locationMasterSheetName || 'Locations',
+        locationHeaders: locationMasterHeaders,
+        locations: locationRows,
+        packages: packageRows
+      };
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = endpoint;
+      form.target = '_blank';
+      form.acceptCharset = 'UTF-8';
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'payload';
+      input.value = JSON.stringify(payload);
+      form.appendChild(input);
+      document.body.appendChild(form);
+      status.textContent = `Opening Google sign-in and sending ${summary} for owner verification…`;
+      status.style.color = '#3730a3';
+      form.submit();
+      form.remove();
+    }
+
+    function exportUnifiedMasterExcel() {
+      const exportData = buildUnifiedLocationPackageRows();
+      if (!exportData.length) {
+        alert('No package configurations have been saved or imported yet.');
+        return;
+      }
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
       worksheet['!cols'] = [{wch:18},{wch:42},{wch:24},{wch:22},{wch:20},{wch:20},{wch:20},{wch:20}];
