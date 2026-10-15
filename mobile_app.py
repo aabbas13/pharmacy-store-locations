@@ -309,9 +309,9 @@ def load_firebase_users(app):
     return sorted(users, key=lambda user: (user.email or "").lower())
 
 
-def set_mobile_app_access(user, enabled: bool, app) -> None:
+def set_user_app_access(user, claim: str, enabled: bool, app) -> None:
     claims = dict(user.custom_claims or {})
-    claims["mobile_app"] = enabled
+    claims[claim] = enabled
     firebase_auth.set_custom_user_claims(user.uid, claims, app=app)
     firebase_auth.revoke_refresh_tokens(user.uid, app=app)
 
@@ -376,6 +376,11 @@ def render_user_management() -> None:
             type="password",
             key="new_storekeeper_password_confirm",
         )
+        app_access_choice = st.selectbox(
+            "App access",
+            ["Both apps", "Store mobile app only", "Picker HTML only", "No app access"],
+            key="new_storekeeper_app_access",
+        )
         create_submitted = st.form_submit_button(
             "Create account", type="primary", use_container_width=True
         )
@@ -393,10 +398,11 @@ def render_user_management() -> None:
                     app=app,
                 )
                 claims = dict(user.custom_claims or {})
-                claims['mobile_app'] = True
-                claims['must_change_password'] = True
+                claims["mobile_app"] = app_access_choice in ("Both apps", "Store mobile app only")
+                claims["picking_helper"] = app_access_choice in ("Both apps", "Picker HTML only")
+                claims["must_change_password"] = app_access_choice != "No app access"
                 firebase_auth.set_custom_user_claims(user.uid, claims, app=app)
-                st.success(f"Created an account for {user.email}.")
+                st.success(f"Created {user.email} with {app_access_choice.lower()} access.")
                 st.rerun()
             except (ValueError, firebase_admin.exceptions.FirebaseError) as exc:
                 st.error(f"Could not create the account: {exc}")
@@ -418,6 +424,7 @@ def render_user_management() -> None:
                 "Name": user.display_name or "",
                 "Status": "Disabled" if user.disabled else "Active",
                 "Mobile app access": "Yes" if (user.custom_claims or {}).get("mobile_app") else "No",
+                "Picker HTML access": "Yes" if (user.custom_claims or {}).get("picking_helper") else "No",
                 "Administrator": "Yes" if (user.custom_claims or {}).get("store_admin") else "No",
             }
             for user in users
@@ -438,16 +445,26 @@ def render_user_management() -> None:
         key="managed_storekeeper_email",
     )
     selected_user = next(user for user in eligible_users if user.email == selected_email)
-    c_access, c_status = st.columns(2)
-    has_access = bool((selected_user.custom_claims or {}).get("mobile_app"))
-    access_label = "Remove app access" if has_access else "Grant app access"
-    if c_access.button(access_label, use_container_width=True):
+    c_mobile, c_picker, c_status = st.columns(3)
+    claims = selected_user.custom_claims or {}
+    has_mobile_access = bool(claims.get("mobile_app"))
+    has_picker_access = bool(claims.get("picking_helper"))
+    mobile_label = "Remove Store access" if has_mobile_access else "Grant Store access"
+    picker_label = "Remove Picker access" if has_picker_access else "Grant Picker access"
+    if c_mobile.button(mobile_label, use_container_width=True):
         try:
-            set_mobile_app_access(selected_user, not has_access, app)
-            st.success(f"Updated mobile app access for {selected_email}. They must sign in again.")
+            set_user_app_access(selected_user, "mobile_app", not has_mobile_access, app)
+            st.success(f"Updated Store app access for {selected_email}. They must sign in again.")
             st.rerun()
         except firebase_admin.exceptions.FirebaseError as exc:
-            st.error(f"Could not update app access: {exc}")
+            st.error(f"Could not update Store app access: {exc}")
+    if c_picker.button(picker_label, use_container_width=True):
+        try:
+            set_user_app_access(selected_user, "picking_helper", not has_picker_access, app)
+            st.success(f"Updated Picker access for {selected_email}. They must sign in again.")
+            st.rerun()
+        except firebase_admin.exceptions.FirebaseError as exc:
+            st.error(f"Could not update Picker access: {exc}")
 
     if selected_user.disabled:
         if c_status.button("Enable account", use_container_width=True):

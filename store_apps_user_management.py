@@ -106,11 +106,14 @@ def add_user() -> None:
         return
     user = auth.create_user(email=email, password=password, display_name=display_name)
     assign_app_access(user.uid, choice)
-    require_password_change(user.uid)
-    print(
-        f"Created shared Store Apps account for {user.email}. "
-        "The temporary password must be changed before using either app."
-    )
+    if choice != "4":
+        require_password_change(user.uid)
+        print(
+            f"Created shared Store Apps account for {user.email}. "
+            "The temporary password must be changed before using either app."
+        )
+    else:
+        print(f"Created account for {user.email} with no app access.")
 
 
 def list_users() -> None:
