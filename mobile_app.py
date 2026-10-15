@@ -120,6 +120,93 @@ def refresh_firebase_id_token(refresh_token: str) -> dict:
     return response.json()
 
 
+def firebase_update_password(id_token: str, new_password: str) -> dict:
+    web_api_key, _, _ = firebase_settings()
+    response = requests.post(
+        "https://identitytoolkit.googleapis.com/v1/accounts:update",
+        params={"key": web_api_key},
+        json={"idToken": id_token, "password": new_password, "returnSecureToken": True},
+        timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def queue_password_change(result: dict, email: str) -> None:
+    st.session_state["password_change_id_token"] = result["idToken"]
+    st.session_state["password_change_refresh_token"] = result["refreshToken"]
+    st.session_state["password_change_email"] = email
+
+
+def show_required_password_change() -> bool:
+    token = st.session_state.get("password_change_id_token")
+    if not token:
+        return False
+
+    st.title("🔑 Change your temporary password")
+    st.info("Choose a new password before using either Store Apps application.")
+    with st.form("required_first_login_password_change"):
+        new_password = st.text_input(
+            "New password (at least 8 characters)", type="password", autocomplete="new-password"
+        )
+        confirm_password = st.text_input(
+            "Confirm new password", type="password", autocomplete="new-password"
+        )
+        submitted = st.form_submit_button(
+            "Change password", type="primary", use_container_width=True
+        )
+
+    if submitted:
+        if new_password != confirm_password:
+            st.error("The passwords do not match.")
+        elif len(new_password) < 8:
+            st.error("Use a password with at least 8 characters.")
+        else:
+            try:
+                updated = firebase_update_password(token, new_password)
+                app = get_firebase_admin_app()
+                decoded = firebase_auth.verify_id_token(
+                    updated["idToken"], check_revoked=False, app=app
+                )
+                user = firebase_auth.get_user(decoded["uid"], app=app)
+                claims = dict(user.custom_claims or {})
+                claims.pop("must_change_password", None)
+                firebase_auth.set_custom_user_claims(user.uid, claims, app=app)
+                firebase_auth.revoke_refresh_tokens(user.uid, app=app)
+                for key in (
+                    "password_change_id_token",
+                    "password_change_refresh_token",
+                    "password_change_email",
+                    "store_locations_id_token",
+                    "store_locations_refresh_token",
+                    "store_locations_email",
+                    "store_admin_id_token",
+                    "store_admin_refresh_token",
+                    "store_admin_email",
+                ):
+                    st.session_state.pop(key, None)
+                st.session_state["password_changed_notice"] = True
+                st.rerun()
+            except (
+                requests.RequestException,
+                KeyError,
+                ValueError,
+                firebase_admin.exceptions.FirebaseError,
+            ):
+                st.error("Could not change the password. Sign in again or contact the administrator.")
+
+    if st.button("Cancel and sign out", use_container_width=True):
+        for key in (
+            "password_change_id_token",
+            "password_change_refresh_token",
+            "password_change_email",
+        ):
+            st.session_state.pop(key, None)
+        st.rerun()
+    st.stop()
+    return True
+
+
 def clear_firebase_session() -> None:
     for key in (
         "store_locations_id_token",
@@ -153,6 +240,9 @@ def show_firebase_login(message: str = "") -> None:
         decoded = firebase_auth.verify_id_token(
             result["idToken"], check_revoked=True, app=app
         )
+        if decoded.get("must_change_password", False):
+            queue_password_change(result, decoded.get("email", email.strip()))
+            st.rerun()
         if not decoded.get("mobile_app", False):
             st.error("This account is not enabled for the mobile app. Contact the administrator.")
             return
@@ -186,6 +276,9 @@ def show_user_management_login() -> None:
             decoded = firebase_auth.verify_id_token(
                 result["idToken"], check_revoked=True, app=get_firebase_admin_app()
             )
+            if decoded.get("must_change_password", False):
+                queue_password_change(result, decoded.get("email", email.strip()))
+                st.rerun()
             if not decoded.get("store_admin", False):
                 st.error("This account is not an administrator.")
             else:
@@ -299,7 +392,10 @@ def render_user_management() -> None:
                     display_name=display_name.strip() or None,
                     app=app,
                 )
-                set_mobile_app_access(user, True, app)
+                claims = dict(user.custom_claims or {})
+                claims['mobile_app'] = True
+                claims['must_change_password'] = True
+                firebase_auth.set_custom_user_claims(user.uid, claims, app=app)
                 st.success(f"Created an account for {user.email}.")
                 st.rerun()
             except (ValueError, firebase_admin.exceptions.FirebaseError) as exc:
@@ -386,8 +482,11 @@ def render_user_management() -> None:
                 firebase_auth.update_user(
                     selected_user.uid, password=new_password, app=app
                 )
+                claims = dict(selected_user.custom_claims or {})
+                claims['must_change_password'] = True
+                firebase_auth.set_custom_user_claims(selected_user.uid, claims, app=app)
                 firebase_auth.revoke_refresh_tokens(selected_user.uid, app=app)
-                st.success(f"Password reset for {selected_email}; existing sessions were revoked.")
+                st.success(f"Password reset for {selected_email}; they must change it at next sign-in.")
             except firebase_admin.exceptions.FirebaseError as exc:
                 st.error(f"Could not reset the password: {exc}")
 
@@ -445,6 +544,8 @@ def require_firebase_user() -> None:
         st.stop()
 
 
+if show_required_password_change():
+    st.stop()
 if not route_user_management():
     require_firebase_user()
     st.sidebar.caption(f"Signed in: {st.session_state.get('store_locations_email', '')}")

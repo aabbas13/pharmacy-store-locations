@@ -14,6 +14,15 @@ from pathlib import Path
 import firebase_admin
 from firebase_admin import auth, credentials
 
+SHARED_FIREBASE_PROJECT_ID = "hmc-picker-checks"
+
+APP_ACCESS = {
+    "1": ("mobile_app", "Store mobile app"),
+    "2": ("picking_helper", "Picker HTML app"),
+    "3": (None, "Both apps"),
+    "4": ("none", "No app access"),
+}
+
 
 def initialize_firebase() -> None:
     key_path = os.environ.get("FIREBASE_ADMIN_CREDENTIALS", "").strip()
@@ -25,6 +34,13 @@ def initialize_firebase() -> None:
 
     with path.open("r", encoding="utf-8") as key_file:
         service_account = json.load(key_file)
+    project_id = service_account.get("project_id")
+    if project_id != SHARED_FIREBASE_PROJECT_ID:
+        raise ValueError(
+            "This manager must use a service-account key from the shared "
+            f"Firebase project '{SHARED_FIREBASE_PROJECT_ID}'. The selected "
+            f"key belongs to '{project_id or 'an unknown project'}'."
+        )
     firebase_admin.initialize_app(credentials.Certificate(service_account))
 
 
@@ -32,10 +48,37 @@ def get_user(email: str):
     return auth.get_user_by_email(email.strip())
 
 
-def assign_mobile_access(uid: str, enabled: bool = True) -> None:
+def prompt_app_access() -> str | None:
+    print("Choose app access: 1) Store mobile app  2) Picker HTML app  3) Both  4) None")
+    choice = input("App access: ").strip()
+    if choice not in APP_ACCESS:
+        print("No access changes were made.")
+        return None
+    return choice
+
+
+def assign_app_access(uid: str, choice: str) -> None:
     user = auth.get_user(uid)
     claims = dict(user.custom_claims or {})
-    claims["mobile_app"] = enabled
+    if choice == "3":
+        claims["mobile_app"] = True
+        claims["picking_helper"] = True
+    elif choice == "4":
+        claims["mobile_app"] = False
+        claims["picking_helper"] = False
+    else:
+        selected_claim, _ = APP_ACCESS[choice]
+        claims[selected_claim] = True
+        other_claim = "picking_helper" if selected_claim == "mobile_app" else "mobile_app"
+        claims[other_claim] = False
+    auth.set_custom_user_claims(uid, claims)
+    auth.revoke_refresh_tokens(uid)
+
+
+def require_password_change(uid: str) -> None:
+    user = auth.get_user(uid)
+    claims = dict(user.custom_claims or {})
+    claims["must_change_password"] = True
     auth.set_custom_user_claims(uid, claims)
     auth.revoke_refresh_tokens(uid)
 
@@ -58,9 +101,16 @@ def add_user() -> None:
     password = prompt_password("Temporary")
     if not password:
         return
+    choice = prompt_app_access()
+    if not choice:
+        return
     user = auth.create_user(email=email, password=password, display_name=display_name)
-    assign_mobile_access(user.uid)
-    print(f"Created mobile app account for {user.email}.")
+    assign_app_access(user.uid, choice)
+    require_password_change(user.uid)
+    print(
+        f"Created shared Store Apps account for {user.email}. "
+        "The temporary password must be changed before using either app."
+    )
 
 
 def list_users() -> None:
@@ -72,13 +122,19 @@ def list_users() -> None:
     if not users:
         print("No accounts found.")
         return
-    print("\nFirebase accounts (mobile app access)")
-    print("--------------------------------------")
+    print("\nShared Firebase accounts")
+    print("------------------------")
     for user in sorted(users, key=lambda entry: (entry.email or "").lower()):
         claims = user.custom_claims or {}
-        access = "enabled" if claims.get("mobile_app") else "no access"
+        access = ", ".join(
+            label
+            for claim, label in (("mobile_app", "Store mobile"), ("picking_helper", "Picker HTML"))
+            if claims.get(claim)
+        ) or "no app access"
         admin = ", user admin" if claims.get("store_admin") else ""
         state = "DISABLED" if user.disabled else "active"
+        if claims.get("must_change_password"):
+            state += "; password change required"
         name = f" — {user.display_name}" if user.display_name else ""
         print(f"{state:8}  {user.email or '(no email)'}{name} [{access}{admin}]")
 
@@ -89,15 +145,21 @@ def reset_password() -> None:
     if not password:
         return
     auth.update_user(user.uid, password=password)
+    require_password_change(user.uid)
     auth.revoke_refresh_tokens(user.uid)
-    print(f"Password reset for {user.email}; existing sessions were revoked.")
+    print(
+        f"Temporary password set for {user.email}; they must change it before using either app. "
+        "Existing sessions were revoked."
+    )
 
 
-def set_mobile_access(enabled: bool) -> None:
+def set_app_access_for_user() -> None:
     user = get_user(input("Account email: "))
-    assign_mobile_access(user.uid, enabled)
-    state = "enabled" if enabled else "removed"
-    print(f"Mobile app access {state} for {user.email}; they must sign in again.")
+    choice = prompt_app_access()
+    if not choice:
+        return
+    assign_app_access(user.uid, choice)
+    print(f"App access updated for {user.email}; they must sign in again.")
 
 
 def set_store_admin(enabled: bool) -> None:
@@ -144,16 +206,15 @@ def main() -> None:
         return
 
     actions = {
-        "1": ("Add storekeeper", add_user),
+        "1": ("Add account", add_user),
         "2": ("List accounts", list_users),
         "3": ("Reset password", reset_password),
-        "4": ("Grant mobile app access", lambda: set_mobile_access(True)),
-        "5": ("Remove mobile app access", lambda: set_mobile_access(False)),
-        "6": ("Grant in-app user-management administrator", lambda: set_store_admin(True)),
-        "7": ("Remove in-app user-management administrator", lambda: set_store_admin(False)),
-        "8": ("Disable account", lambda: set_user_disabled(True)),
-        "9": ("Enable account", lambda: set_user_disabled(False)),
-        "10": ("Delete account", delete_user),
+        "4": ("Change app access (picker/store/both/none)", set_app_access_for_user),
+        "5": ("Grant in-app user-management administrator", lambda: set_store_admin(True)),
+        "6": ("Remove in-app user-management administrator", lambda: set_store_admin(False)),
+        "7": ("Disable account", lambda: set_user_disabled(True)),
+        "8": ("Enable account", lambda: set_user_disabled(False)),
+        "9": ("Delete account", delete_user),
     }
     while True:
         print("\nStore Apps User Management")
