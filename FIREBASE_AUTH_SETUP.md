@@ -8,19 +8,18 @@ This setup applies to the Streamlit mobile app only.
 
 1. In Firebase Console, select the project for the mobile app and enable
    **Authentication → Sign-in method → Email/Password**.
-2. Disable public account creation in the app's user flow. Accounts are created
-   by the local manager, not by anonymous visitors.
+2. The app has no public registration flow. Create accounts from its
+   administrator-only user-management page or the local manager.
 3. Copy the Firebase project's Web API key and project ID.
-4. Create two service accounts. Give the local account manager the
-   **Firebase Authentication Admin** role (`roles/firebaseauth.admin`). Give
-   the hosted app a separate account with the read-only **Firebase
-   Authentication Viewer** role (`roles/firebaseauth.viewer`). The hosted app
-   only needs to validate accounts and check their access; it should not hold
-   the account-management key. Store both JSON keys outside this project and
-   outside GitHub.
+4. Create separate service accounts for the local manager and the hosted app.
+   Both need the **Firebase Authentication Admin** role
+   (`roles/firebaseauth.admin`) because the in-app management page creates
+   accounts, resets passwords, and changes access. Keep the local manager key
+   outside this project and GitHub. The hosted key belongs only in Streamlit
+   Secrets; never expose it to the browser or commit it to GitHub.
 5. In Streamlit Community Cloud **Manage app → Settings → Secrets**, retain the
    existing `[gcp_service_account]` section and add the Firebase web API key,
-   project ID, and the hosted app's read-only service-account values:
+   project ID, and the hosted app's service-account values:
 
    ```toml
    [firebase]
@@ -37,8 +36,10 @@ This setup applies to the Streamlit mobile app only.
    token_uri = "https://oauth2.googleapis.com/token"
    ```
 
-   Keep the existing Google Sheets credentials intact. Use the local admin key
-   only when running the user manager. Never commit Firebase private keys or
+   Keep the existing Google Sheets credentials intact. The hosted Admin SDK
+   key grants user-management privileges across this Firebase project's user
+   accounts, so keep the Firebase project dedicated to this app and protect
+   access to the Streamlit app's settings. Never commit private keys or
    passwords to GitHub.
 
 ## Manage storekeeper accounts locally
@@ -60,3 +61,7 @@ does not save that path. It can create accounts, list access, reset passwords, g
 or remove mobile app access, disable or enable accounts, and delete accounts.
 Newly created accounts are granted access to this mobile app. Passwords are
 prompted without echoing them to the screen.
+
+Use the manager's **Grant in-app user-management administrator** action for
+the administrator account that should open the login page's **User
+management** button. The admin claim cannot be granted from the web page.

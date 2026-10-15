@@ -77,9 +77,10 @@ def list_users() -> None:
     for user in sorted(users, key=lambda entry: (entry.email or "").lower()):
         claims = user.custom_claims or {}
         access = "enabled" if claims.get("mobile_app") else "no access"
+        admin = ", user admin" if claims.get("store_admin") else ""
         state = "DISABLED" if user.disabled else "active"
         name = f" — {user.display_name}" if user.display_name else ""
-        print(f"{state:8}  {user.email or '(no email)'}{name} [{access}]")
+        print(f"{state:8}  {user.email or '(no email)'}{name} [{access}{admin}]")
 
 
 def reset_password() -> None:
@@ -97,6 +98,23 @@ def set_mobile_access(enabled: bool) -> None:
     assign_mobile_access(user.uid, enabled)
     state = "enabled" if enabled else "removed"
     print(f"Mobile app access {state} for {user.email}; they must sign in again.")
+
+
+def set_store_admin(enabled: bool) -> None:
+    user = get_user(input("Account email: "))
+    if enabled:
+        confirmation = input(
+            f"Type {user.email} to grant in-app user-management administrator access: "
+        ).strip()
+        if confirmation.lower() != (user.email or "").lower():
+            print("Confirmation did not match; administrator access was not changed.")
+            return
+    claims = dict(user.custom_claims or {})
+    claims["store_admin"] = enabled
+    auth.set_custom_user_claims(user.uid, claims)
+    auth.revoke_refresh_tokens(user.uid)
+    state = "granted to" if enabled else "removed from"
+    print(f"In-app user-management administrator access {state} {user.email}.")
 
 
 def set_user_disabled(disabled: bool) -> None:
@@ -131,9 +149,11 @@ def main() -> None:
         "3": ("Reset password", reset_password),
         "4": ("Grant mobile app access", lambda: set_mobile_access(True)),
         "5": ("Remove mobile app access", lambda: set_mobile_access(False)),
-        "6": ("Disable account", lambda: set_user_disabled(True)),
-        "7": ("Enable account", lambda: set_user_disabled(False)),
-        "8": ("Delete account", delete_user),
+        "6": ("Grant in-app user-management administrator", lambda: set_store_admin(True)),
+        "7": ("Remove in-app user-management administrator", lambda: set_store_admin(False)),
+        "8": ("Disable account", lambda: set_user_disabled(True)),
+        "9": ("Enable account", lambda: set_user_disabled(False)),
+        "10": ("Delete account", delete_user),
     }
     while True:
         print("\nStore Apps User Management")

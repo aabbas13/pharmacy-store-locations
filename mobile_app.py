@@ -142,6 +142,9 @@ def show_firebase_login(message: str = "") -> None:
             "Sign in", type="primary", use_container_width=True
         )
     if not submitted:
+        if st.button("User management", use_container_width=True):
+            st.session_state["show_user_management_login"] = True
+            st.rerun()
         return
 
     try:
@@ -164,6 +167,242 @@ def show_firebase_login(message: str = "") -> None:
         firebase_admin.exceptions.FirebaseError,
     ):
         st.error("Sign-in failed. Check your email and password, or contact the administrator.")
+
+
+def show_user_management_login() -> None:
+    st.title("🔐 Administrator Sign In")
+    st.caption("Only an account with user-management administrator access can continue.")
+    with st.form("store_locations_admin_login_form"):
+        email = st.text_input("Administrator email", autocomplete="username")
+        password = st.text_input(
+            "Password", type="password", autocomplete="current-password"
+        )
+        submitted = st.form_submit_button(
+            "Open user management", type="primary", use_container_width=True
+        )
+    if submitted:
+        try:
+            result = firebase_sign_in(email.strip(), password)
+            decoded = firebase_auth.verify_id_token(
+                result["idToken"], check_revoked=True, app=get_firebase_admin_app()
+            )
+            if not decoded.get("store_admin", False):
+                st.error("This account is not an administrator.")
+            else:
+                st.session_state["store_admin_id_token"] = result["idToken"]
+                st.session_state["store_admin_refresh_token"] = result["refreshToken"]
+                st.session_state["store_admin_email"] = decoded.get("email", email.strip())
+                st.session_state.pop("show_user_management_login", None)
+                st.rerun()
+        except (
+            requests.RequestException,
+            KeyError,
+            ValueError,
+            firebase_admin.exceptions.FirebaseError,
+        ):
+            st.error("Sign-in failed. Check your credentials or contact the administrator.")
+
+    if st.button("Back to storekeeper sign in", use_container_width=True):
+        st.session_state.pop("show_user_management_login", None)
+        st.rerun()
+
+
+def load_firebase_users(app):
+    users = []
+    page = firebase_auth.list_users(app=app)
+    while page:
+        users.extend(page.users)
+        page = page.get_next_page()
+    return sorted(users, key=lambda user: (user.email or "").lower())
+
+
+def set_mobile_app_access(user, enabled: bool, app) -> None:
+    claims = dict(user.custom_claims or {})
+    claims["mobile_app"] = enabled
+    firebase_auth.set_custom_user_claims(user.uid, claims, app=app)
+    firebase_auth.revoke_refresh_tokens(user.uid, app=app)
+
+
+def render_user_management() -> None:
+    app = get_firebase_admin_app()
+    decoded = None
+    token = st.session_state.get("store_admin_id_token")
+    try:
+        decoded = firebase_auth.verify_id_token(token, check_revoked=True, app=app)
+    except firebase_auth.ExpiredIdTokenError:
+        try:
+            refreshed = refresh_firebase_id_token(
+                st.session_state["store_admin_refresh_token"]
+            )
+            decoded = firebase_auth.verify_id_token(
+                refreshed["id_token"], check_revoked=True, app=app
+            )
+            st.session_state["store_admin_id_token"] = refreshed["id_token"]
+            if refreshed.get("refresh_token"):
+                st.session_state["store_admin_refresh_token"] = refreshed["refresh_token"]
+        except (
+            requests.RequestException,
+            KeyError,
+            firebase_admin.exceptions.FirebaseError,
+        ):
+            decoded = None
+    except firebase_admin.exceptions.FirebaseError:
+        decoded = None
+
+    if not decoded or not decoded.get("store_admin", False):
+        st.session_state.pop("store_admin_id_token", None)
+        st.session_state.pop("store_admin_refresh_token", None)
+        st.session_state.pop("store_admin_email", None)
+        st.session_state["show_user_management_login"] = True
+        st.rerun()
+
+    st.title("👥 Store Location User Management")
+    st.caption(f"Administrator: {st.session_state.get('store_admin_email', '')}")
+    col_signout, col_back = st.columns(2)
+    if col_signout.button("Sign out", use_container_width=True):
+        for key in ("store_admin_id_token", "store_admin_refresh_token", "store_admin_email"):
+            st.session_state.pop(key, None)
+        st.session_state.pop("show_user_management_login", None)
+        st.rerun()
+    if col_back.button("Back to app sign in", use_container_width=True):
+        for key in ("store_admin_id_token", "store_admin_refresh_token", "store_admin_email"):
+            st.session_state.pop(key, None)
+        st.rerun()
+
+    st.subheader("Add a storekeeper")
+    with st.form("create_storekeeper_form"):
+        email = st.text_input("Email address", key="new_storekeeper_email")
+        display_name = st.text_input("Name", key="new_storekeeper_name")
+        password = st.text_input(
+            "Temporary password (at least 8 characters)",
+            type="password",
+            key="new_storekeeper_password",
+        )
+        confirm_password = st.text_input(
+            "Confirm temporary password",
+            type="password",
+            key="new_storekeeper_password_confirm",
+        )
+        create_submitted = st.form_submit_button(
+            "Create account", type="primary", use_container_width=True
+        )
+    if create_submitted:
+        if password != confirm_password:
+            st.error("The passwords do not match.")
+        elif len(password) < 8:
+            st.error("Use a password with at least 8 characters.")
+        else:
+            try:
+                user = firebase_auth.create_user(
+                    email=email.strip(),
+                    password=password,
+                    display_name=display_name.strip() or None,
+                    app=app,
+                )
+                set_mobile_app_access(user, True, app)
+                st.success(f"Created an account for {user.email}.")
+                st.rerun()
+            except (ValueError, firebase_admin.exceptions.FirebaseError) as exc:
+                st.error(f"Could not create the account: {exc}")
+
+    st.subheader("Existing accounts")
+    try:
+        users = load_firebase_users(app)
+    except firebase_admin.exceptions.FirebaseError:
+        st.error("Could not load Firebase accounts. Check the app's Firebase Admin permissions.")
+        return
+    if not users:
+        st.info("No accounts found.")
+        return
+
+    st.dataframe(
+        [
+            {
+                "Email": user.email or "",
+                "Name": user.display_name or "",
+                "Status": "Disabled" if user.disabled else "Active",
+                "Mobile app access": "Yes" if (user.custom_claims or {}).get("mobile_app") else "No",
+                "Administrator": "Yes" if (user.custom_claims or {}).get("store_admin") else "No",
+            }
+            for user in users
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    eligible_users = [user for user in users if not (user.custom_claims or {}).get("store_admin")]
+    if not eligible_users:
+        st.info("There are no non-administrator accounts to manage.")
+        return
+
+    st.subheader("Manage an account")
+    selected_email = st.selectbox(
+        "Storekeeper account",
+        [user.email for user in eligible_users],
+        key="managed_storekeeper_email",
+    )
+    selected_user = next(user for user in eligible_users if user.email == selected_email)
+    c_access, c_status = st.columns(2)
+    has_access = bool((selected_user.custom_claims or {}).get("mobile_app"))
+    access_label = "Remove app access" if has_access else "Grant app access"
+    if c_access.button(access_label, use_container_width=True):
+        try:
+            set_mobile_app_access(selected_user, not has_access, app)
+            st.success(f"Updated mobile app access for {selected_email}. They must sign in again.")
+            st.rerun()
+        except firebase_admin.exceptions.FirebaseError as exc:
+            st.error(f"Could not update app access: {exc}")
+
+    if selected_user.disabled:
+        if c_status.button("Enable account", use_container_width=True):
+            try:
+                firebase_auth.update_user(selected_user.uid, disabled=False, app=app)
+                st.success(f"Enabled {selected_email}.")
+                st.rerun()
+            except firebase_admin.exceptions.FirebaseError as exc:
+                st.error(f"Could not enable the account: {exc}")
+    elif c_status.button("Disable account", use_container_width=True):
+        try:
+            firebase_auth.update_user(selected_user.uid, disabled=True, app=app)
+            firebase_auth.revoke_refresh_tokens(selected_user.uid, app=app)
+            st.success(f"Disabled {selected_email}; existing sessions were revoked.")
+            st.rerun()
+        except firebase_admin.exceptions.FirebaseError as exc:
+            st.error(f"Could not disable the account: {exc}")
+
+    with st.form("reset_storekeeper_password_form"):
+        new_password = st.text_input(
+            "New password (at least 8 characters)", type="password"
+        )
+        new_password_confirm = st.text_input("Confirm new password", type="password")
+        reset_submitted = st.form_submit_button("Reset password", use_container_width=True)
+    if reset_submitted:
+        if new_password != new_password_confirm:
+            st.error("The passwords do not match.")
+        elif len(new_password) < 8:
+            st.error("Use a password with at least 8 characters.")
+        else:
+            try:
+                firebase_auth.update_user(
+                    selected_user.uid, password=new_password, app=app
+                )
+                firebase_auth.revoke_refresh_tokens(selected_user.uid, app=app)
+                st.success(f"Password reset for {selected_email}; existing sessions were revoked.")
+            except firebase_admin.exceptions.FirebaseError as exc:
+                st.error(f"Could not reset the password: {exc}")
+
+
+def route_user_management() -> bool:
+    if st.session_state.get("show_user_management_login") and not st.session_state.get(
+        "store_admin_id_token"
+    ):
+        show_user_management_login()
+        st.stop()
+    if not st.session_state.get("store_admin_id_token"):
+        return False
+    render_user_management()
+    st.stop()
+    return True
 
 
 def require_firebase_user() -> None:
@@ -206,12 +445,12 @@ def require_firebase_user() -> None:
         st.stop()
 
 
-require_firebase_user()
-st.sidebar.caption(f"Signed in: {st.session_state.get('store_locations_email', '')}")
-if st.sidebar.button("Sign out", key="store_locations_sign_out"):
-    clear_firebase_session()
-    st.rerun()
-
+if not route_user_management():
+    require_firebase_user()
+    st.sidebar.caption(f"Signed in: {st.session_state.get('store_locations_email', '')}")
+    if st.sidebar.button("Sign out", key="store_locations_sign_out"):
+        clear_firebase_session()
+        st.rerun()
 
 # Give each browser profile a stable, separate settings key. Streamlit v2
 # state sends the browser ID directly to Python without a page reload.
