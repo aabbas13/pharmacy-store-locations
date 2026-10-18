@@ -1054,66 +1054,58 @@ def get_row_format(fmt_start_row: str, fmt_max_row: str) -> dict:
     return {"numeric": False, "prefix": prefix, "start_char": start_char, "max_char": max_char}
 
 def move_bin_vertical(direction: str, start_row: str, max_row: str, max_col_val: int) -> None:
+    """Move one bin in the device's selected vertical or horizontal fill order."""
     current_row = st.session_state.bin_sig1_in.strip().upper()
     current_col = st.session_state.bin_sig2_in.strip()
     fmt = get_row_format(start_row, max_row)
-    wrap_column = False
+    step = 1 if direction == "next" else -1
 
-    if direction == "next":
-        if fmt["numeric"]:
-            try:
-                current_value = int(current_row)
-            except ValueError:
-                current_value = fmt["start_val"]
-            if current_value >= fmt["max_val"]:
-                new_row = str(fmt["start_val"]).zfill(fmt["pad_len"])
-                wrap_column = True
-            else:
-                new_row = str(current_value + 1).zfill(fmt["pad_len"])
-        else:
-            if len(current_row) >= 2:
-                prefix, current_char = current_row[:-1], current_row[-1]
-            else:
-                prefix, current_char = "", (current_row or fmt["start_char"])
-            if current_char >= fmt["max_char"]:
-                new_row = prefix + fmt["start_char"]
-                wrap_column = True
-            else:
-                new_row = prefix + chr(ord(current_char) + 1)
+    if fmt["numeric"]:
+        try:
+            row_value = int(current_row)
+        except ValueError:
+            row_value = fmt["start_val"]
+        row_min, row_max = fmt["start_val"], fmt["max_val"]
     else:
-        if fmt["numeric"]:
-            try:
-                current_value = int(current_row)
-            except ValueError:
-                current_value = fmt["start_val"]
-            if current_value <= fmt["start_val"]:
-                new_row = str(fmt["max_val"]).zfill(fmt["pad_len"])
-                wrap_column = True
-            else:
-                new_row = str(current_value - 1).zfill(fmt["pad_len"])
-        else:
-            if len(current_row) >= 2:
-                prefix, current_char = current_row[:-1], current_row[-1]
-            else:
-                prefix, current_char = "", (current_row or fmt["start_char"])
-            if current_char <= fmt["start_char"]:
-                new_row = prefix + fmt["max_char"]
-                wrap_column = True
-            else:
-                new_row = prefix + chr(ord(current_char) - 1)
+        row_value = ord(current_row[-1:] or fmt["start_char"]) - ord("A")
+        row_min = ord(fmt["start_char"]) - ord("A")
+        row_max = ord(fmt["max_char"]) - ord("A")
+    try:
+        column_value = int(current_col)
+    except ValueError:
+        column_value = 1
+
+    fill_order = st.session_state.get("vertical_bounds", {}).get("fill_order", "Vertical")
+    if fill_order == "Vertical":
+        row_value += step
+        if row_value > row_max:
+            row_value, column_value = row_min, column_value + 1
+        elif row_value < row_min:
+            row_value, column_value = row_max, column_value - 1
+    else:
+        column_value += step
+        if column_value > max_col_val:
+            column_value, row_value = 1, row_value + 1
+        elif column_value < 1:
+            column_value, row_value = max_col_val, row_value - 1
+
+    if row_value > row_max:
+        row_value = row_min
+    elif row_value < row_min:
+        row_value = row_max
+    if column_value > max_col_val:
+        column_value = 1
+    elif column_value < 1:
+        column_value = max_col_val
+
+    if fmt["numeric"]:
+        new_row = str(row_value).zfill(fmt["pad_len"])
+    else:
+        prefix = fmt["prefix"]
+        new_row = prefix + chr(ord("A") + row_value)
 
     st.session_state.bin_sig1_in = new_row
-    if wrap_column:
-        try:
-            current_number = int(current_col)
-            next_number = current_number + (1 if direction == "next" else -1)
-            if next_number > max_col_val:
-                next_number = 1
-            if next_number < 1:
-                next_number = max_col_val
-            st.session_state.bin_sig2_in = f"{next_number:02d}"
-        except ValueError:
-            pass
+    st.session_state.bin_sig2_in = f"{column_value:02d}"
     st.session_state.bin_location_in = format_bin_location_input(
         location_from_bin_parts(
             st.session_state.bin_area_in,
@@ -1449,8 +1441,12 @@ else:
     device_bin_settings = load_device_bin_settings(device_id)
     p_bin = device_bin_settings.get("last_bin_parts", {"area": "A1", "type": "DR", "sig1": "", "sig2": ""})
     p_bounds = device_bin_settings.get("vertical_bounds", {"start": "AA", "max": "AO", "max_col": "30"})
-    if "vertical_bounds" not in st.session_state:
-        st.session_state.vertical_bounds = p_bounds
+    fill_order_key = f"bin_fill_order_{device_id}"
+    if fill_order_key not in st.session_state:
+        st.session_state[fill_order_key] = p_bounds.get("fill_order", "Vertical")
+    # Reload bounds for the active device before processing voice commands so
+    # one browser/device cannot inherit another device's filling direction.
+    st.session_state.vertical_bounds = p_bounds
 
     # Direct integration to widget keys to avoid variable mismatch
     if "bin_area_in" not in st.session_state:
@@ -1572,9 +1568,16 @@ else:
         max_col_raw = c_conf3.text_input(
             "Max Column",
             value=p_bounds.get("max_col", "30"),
-            help="Once Sigma 4 (Col#) passes this number, it wraps back to 01."
+            help="Horizontal filling uses columns 01 through this number before moving to the next row."
         ).strip()
-        st.caption("Max Row can be a full row (AO) or its final identifier (O).")
+        fill_order = st.radio(
+            "Filling order",
+            ["Vertical", "Horizontal"],
+            key=fill_order_key,
+            horizontal=True,
+            help="Vertical fills down each column, then moves to the next column. Horizontal fills across each row, then moves to the next row."
+        )
+        st.caption("Max Row can be a full row (AD) or its final identifier (D).")
         try:
             max_col_val = int(max_col_raw)
             if max_col_val < 1:
@@ -1582,7 +1585,7 @@ else:
         except ValueError:
             max_col_val = 30
         st.session_state.vertical_bounds = {
-            "start": start_row, "max": max_row, "max_col": max_col_raw
+            "start": start_row, "max": max_row, "max_col": max_col_raw, "fill_order": fill_order
         }
         device_bin_settings["vertical_bounds"] = st.session_state.vertical_bounds
         save_device_bin_settings(device_id, device_bin_settings)
@@ -1618,7 +1621,7 @@ else:
           .bin-location-float.incomplete {{ background: #92400e; }}
           .bin-location-float strong {{ font-size: 1.15rem; letter-spacing: .04em; }}
         </style>
-        <div class="bin-location-float {active_bin_class}" role="status">
+        <div id="bin-location-float" class="bin-location-float {active_bin_class}" role="status">
           📍 Active bin: <strong>{active_bin_display}</strong>
         </div>
         """,
@@ -1696,12 +1699,31 @@ else:
       <body style="margin:0;padding:0;">
         <script>
           const shouldFocus = {should_focus};
+          const parentWindow = window.parent;
+          if (!parentWindow.__binLocationViewportHandler) {{
+              parentWindow.__binLocationViewportHandler = () => {{
+                  const banner = parentWindow.document.getElementById('bin-location-float');
+                  if (!banner) return;
+                  const viewport = parentWindow.visualViewport;
+                  banner.style.position = 'fixed';
+                  banner.style.top = ((viewport ? viewport.offsetTop : 0) + 52) + 'px';
+                  banner.style.zIndex = '2147483647';
+              }};
+              if (parentWindow.visualViewport) {{
+                  parentWindow.visualViewport.addEventListener('resize', parentWindow.__binLocationViewportHandler);
+                  parentWindow.visualViewport.addEventListener('scroll', parentWindow.__binLocationViewportHandler);
+              }}
+          }}
+          parentWindow.__binLocationViewportHandler();
           if (shouldFocus) {{
               const doc = window.parent.document;
               let attempts = 0;
               const focusSearch = () => {{
                   const input = doc.querySelector('input[placeholder="E.G. 1234 OR PARACETAMOL"]');
                   if (input && !input.disabled) {{
+                      input.setAttribute('inputmode', 'numeric');
+                      input.setAttribute('enterkeyhint', 'search');
+                      parentWindow.__binLocationViewportHandler();
                       input.focus();
                       input.select();
                   }} else if (attempts++ < 12) {{
