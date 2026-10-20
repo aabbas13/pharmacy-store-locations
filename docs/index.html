@@ -3920,6 +3920,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             right: { style: "thin", color: { argb: "FFCBD5E1" } }
           };
         });
+
+        // Keep the quantity at its normal size while rendering each check mark
+        // three times larger. ExcelJS rich-text runs size the tick independently.
+        if (item.itemPicked) {
+          [7, 8].forEach(colNumber => {
+            const cell = row.getCell(colNumber);
+            if (typeof cell.value !== 'string' || !/[✓✔]/.test(cell.value)) return;
+            const runs = cell.value.split(/([✓✔])/g).filter(part => part !== '');
+            cell.value = {
+              richText: runs.map(part => /[✓✔]/.test(part)
+                ? { text: part, font: { name: 'Arial', size: 30, bold: true, color: { argb: 'FF000000' } } }
+                : { text: part })
+            };
+          });
+          row.height = Math.max(row.height || 0, 42);
+        }
       });
 
       // No blank body row before the print footer.
@@ -4468,6 +4484,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function findXmlCell(sheetXml,address){const escaped=address.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return sheetXml.match(new RegExp(`<c\\b(?=[^>]*\\br="${escaped}")[^>]*(?:\\/>|>[\\s\\S]*?<\\/c>)`));}
     function readXmlCellText(sheetXml,address,sharedStringsXml){const found=findXmlCell(sheetXml,address);if(!found)return '';const cell=found[0],opening=cell.match(/^<c\b[^>]*>/)?.[0]||'',type=opening.match(/\bt="([^"]+)"/)?.[1]||'';if(type==='s'){const index=Number(cell.match(/<v>(\d+)<\/v>/)?.[1]);const items=[...(sharedStringsXml||'').matchAll(/<si\b[^>]*>[\s\S]*?<\/si>/g)];const item=items[index]?.[0]||'';return [...item.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(match=>xmlUnescape(match[1])).join('');}if(type==='inlineStr'){const inline=cell.match(/<is\b[^>]*>([\s\S]*?)<\/is>/)?.[1]||'';return [...inline.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map(match=>xmlUnescape(match[1])).join('');}const value=cell.match(/<v>([\s\S]*?)<\/v>/)?.[1]||'';return xmlUnescape(value);}
     function writeXmlCellText(sheetXml,address,value){const escaped=xmlEscape(value),cellMatch=findXmlCell(sheetXml,address);if(cellMatch){const oldCell=cellMatch[0],opening=oldCell.match(/^<c\b[^>]*>/)?.[0]||'<c>',attributes=opening.slice(2,-1).replace(/\/$/,'').replace(/\s+t="[^"]*"/g,'');const replacement=`<c${attributes} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`;return sheetXml.replace(oldCell,()=>replacement);}const rowNumber=Number(address.match(/\d+$/)?.[0]);const rowRegex=new RegExp(`(<row\\b(?=[^>]*\\br="${rowNumber}")[^>]*>)([\\s\\S]*?)(<\\/row>)`);const rowMatch=sheetXml.match(rowRegex);if(!rowMatch)throw new Error(`Could not find worksheet row ${rowNumber}.`);const newCell=`<c r="${address}" t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`;return sheetXml.replace(rowRegex,(_match,open,content,close)=>{const colNumber=column=>{let n=0;for(const ch of column)n=n*26+ch.charCodeAt(0)-64;return n;};const targetCol=colNumber(address.match(/^[A-Z]+/)[0]);const cells=[...content.matchAll(/<c\b[^>]*\br="([A-Z]+)\d+"[^>]*(?:\/>|>[\s\S]*?<\/c>)/g)];const nextCell=cells.find(cell=>colNumber(cell[1])>targetCol);if(nextCell)return `${open}${content.slice(0,nextCell.index)}${newCell}${content.slice(nextCell.index)}${close}`;return `${open}${content}${newCell}${close}`;});}
+    function writeXmlCellTextWithLargeChecks(sheetXml, address, value) {
+      const updatedXml = writeXmlCellText(sheetXml, address, value);
+      const found = findXmlCell(updatedXml, address);
+      if (!found) throw new Error(`Could not locate quantity cell ${address} while formatting its check mark.`);
+      const oldCell = found[0];
+      const opening = oldCell.match(/^<c\b[^>]*>/)?.[0] || '<c>';
+      const attributes = opening.slice(2, -1).replace(/\/$/, '').replace(/\s+t="[^"]*"/g, '');
+      const runs = String(value ?? '').split(/([✓✔])/g).filter(part => part !== '');
+      const richText = runs.map(part => /[✓✔]/.test(part)
+        ? `<r><rPr><b/><sz val="30"/><rFont val="Arial"/><color rgb="FF000000"/></rPr><t xml:space="preserve">${xmlEscape(part)}</t></r>`
+        : `<r><t xml:space="preserve">${xmlEscape(part)}</t></r>`).join('');
+      const replacement = `<c${attributes} t="inlineStr"><is>${richText}</is></c>`;
+      return updatedXml.replace(oldCell, () => replacement);
+    }
+
     async function exportAudit() {
       if (!session) return;
       if (typeof JSZip === 'undefined') {
@@ -4507,7 +4538,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const checkCount = (quantityText.match(/[✓✔]/g) || []).length;
             if (checkCount < 2) {
               const baseText = quantityText.trimEnd();
-              sheetXml = writeXmlCellText(sheetXml, qtyAddress, `${baseText}${baseText ? ' ' : ''}✓`);
+              sheetXml = writeXmlCellTextWithLargeChecks(sheetXml, qtyAddress, `${baseText}${baseText ? ' ' : ''}✓`);
             }
           }
 
