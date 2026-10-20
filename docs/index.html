@@ -188,6 +188,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .inline-config { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
     .inline-col { flex: 1; }
     .inline-symbol { font-size: 1.2rem; font-weight: bold; color: var(--muted); padding-top: 16px; text-align: center; }
+    .package-qty-adjust { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    .package-qty-adjust input { min-width: 0; padding: 8px 4px; text-align: center; }
+    @media (max-width: 600px) { .package-qty-adjust { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
     .pkg-row-2 { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px; }
 
@@ -507,9 +510,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div><b>EXP</b><br><span id="expDisplay"></span></div>
     </div>
 
-    <details id="packageDetails" class="picker-secondary-details">
-      <summary>📦 Packaging details and quantity breakdown</summary>
-      <div id="packageIdentityDisplay" style="margin:4px 0 10px;color:var(--muted);font-size:.85rem;"></div>
+    <section id="packageDetails" class="picker-secondary-details">
+      <details id="packageIdentityDetails">
+        <summary>📦 Package identity</summary>
+        <div id="packageIdentityDisplay" style="margin:4px 0 10px;color:var(--muted);font-size:.85rem;"></div>
+      </details>
       <label>Packaging Configuration (Pack × Carton × Catch)</label>
       <div class="inline-config">
         <div class="inline-col">
@@ -536,6 +541,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button id="savePkgBtn" class="save-pkg-btn" onclick="saveCurrentItemPackaging()" disabled>💾 Save Packaging Data</button>
         </div>
       </div>
+      <label>Adjust quantity by package count</label>
+      <div class="inline-config package-qty-adjust">
+        <div class="inline-col"><label for="qtyCartons">Cartons</label><input type="number" id="qtyCartons" min="0" step="1" value="0" disabled></div>
+        <div class="inline-col"><label for="qtyCatches">Catches</label><input type="number" id="qtyCatches" min="0" step="1" value="0" disabled></div>
+        <div class="inline-col"><label for="qtyPacks">Packs</label><input type="number" id="qtyPacks" min="0" step="1" value="0" disabled></div>
+        <div class="inline-col"><label for="qtyLooseUnits">Loose units</label><input type="number" id="qtyLooseUnits" min="0" step="1" value="0" disabled></div>
+      </div>
       <label>Calculated Breakdown</label>
       <div class="grid-4">
         <div class="calc-box"><div class="calc-val" id="resCartons">0</div><div class="calc-lbl">Cartons</div></div>
@@ -543,7 +555,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="calc-box"><div class="calc-val" id="resPacks">0</div><div class="calc-lbl">Packs</div></div>
         <div class="calc-box"><div class="calc-val" id="resStrips">0</div><div class="calc-lbl">Strips</div></div>
       </div>
-    </details>
+    </section>
 
     <!-- Editable Picked Quantity -->
     <div class="qty-edit-box">
@@ -2823,7 +2835,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function updateLotUIState() {
       const item = pickList[currentIndex];
       const btn = document.getElementById('lotConfirmBtn');
-      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment'];
+      const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment', 'qtyCartons', 'qtyCatches', 'qtyPacks', 'qtyLooseUnits'];
 
       if (item.lotConfirmed) {
         stopLotSpeech();
@@ -2839,6 +2851,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('confirmItemBtn').disabled = true;
         document.getElementById('savePkgBtn').disabled = true;
       }
+      updatePackageQuantityControlStates();
+    }
+
+    function updatePackageQuantityControlStates() {
+      const confirmed = !!pickList[currentIndex]?.lotConfirmed;
+      const packSize = parseInt(document.getElementById('packSize').value, 10) || 0;
+      const cartonSize = parseInt(document.getElementById('cartonSizeInPacks').value, 10) || 0;
+      const catchSize = parseInt(document.getElementById('catchSizeInPacks').value, 10) || 0;
+      document.getElementById('qtyCartons').disabled = !confirmed || packSize <= 0 || cartonSize <= 0;
+      document.getElementById('qtyCatches').disabled = !confirmed || packSize <= 0 || catchSize <= 0;
+      document.getElementById('qtyPacks').disabled = !confirmed || packSize <= 0;
+      document.getElementById('qtyLooseUnits').disabled = !confirmed;
     }
 
     function saveCurrentItemPackaging() {
@@ -2885,6 +2909,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       saveSessionState();
       calculateLogicalBreakdown(item.finalPickedQty);
       renderSummaryTable();
+    });
+
+    ['qtyCartons', 'qtyCatches', 'qtyPacks', 'qtyLooseUnits'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updatePickedQuantityFromPackageCounts);
     });
 
     document.getElementById('itemComment').addEventListener('input', function() {
@@ -3246,7 +3274,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           return;
         }
         askVoiceConfirmation(`Set ${field.label} to ${number} for item ${item.code}`, () => {
-          document.getElementById('packageDetails').open = true;
+          document.getElementById('packageIdentityDetails').open = true;
           const input = document.getElementById(field.id);
           input.value = number;
           input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3398,6 +3426,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         document.getElementById('resCatches').innerText = 0;
         document.getElementById('resPacks').innerText = 0;
         document.getElementById('resStrips').innerText = 0;
+        ['qtyCartons', 'qtyCatches', 'qtyPacks'].forEach(id => document.getElementById(id).value = 0);
+        document.getElementById('qtyLooseUnits').value = Math.max(0, Number(requestedQty) || 0);
         return;
       }
 
@@ -3420,10 +3450,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       const strips = Math.floor(remainingUnitsAfterPacks / stripSize);
 
+      document.getElementById('qtyCartons').value = cartons;
+      document.getElementById('qtyCatches').value = catches;
+      document.getElementById('qtyPacks').value = remainingPacks;
+      document.getElementById('qtyLooseUnits').value = remainingUnitsAfterPacks;
+
       document.getElementById('resCartons').innerText = cartons;
       document.getElementById('resCatches').innerText = catches;
       document.getElementById('resPacks').innerText = remainingPacks;
       document.getElementById('resStrips').innerText = strips;
+    }
+
+    function updatePickedQuantityFromPackageCounts() {
+      const item = pickList[currentIndex];
+      if (!item) return;
+      const packSize = Math.max(0, parseInt(document.getElementById('packSize').value, 10) || 0);
+      const cartonPacks = Math.max(0, parseInt(document.getElementById('cartonSizeInPacks').value, 10) || 0);
+      const catchPacks = Math.max(0, parseInt(document.getElementById('catchSizeInPacks').value, 10) || 0);
+      const cartons = Math.max(0, parseInt(document.getElementById('qtyCartons').value, 10) || 0);
+      const catches = Math.max(0, parseInt(document.getElementById('qtyCatches').value, 10) || 0);
+      const packs = Math.max(0, parseInt(document.getElementById('qtyPacks').value, 10) || 0);
+      const looseUnits = Math.max(0, parseInt(document.getElementById('qtyLooseUnits').value, 10) || 0);
+      const stripSize = Math.max(1, parseInt(document.getElementById('stripSize').value, 10) || 1);
+      const total = ((cartons * cartonPacks) + (catches * catchPacks) + packs) * packSize + looseUnits;
+      item.finalPickedQty = total;
+      document.getElementById('pickedQtyInput').value = total;
+      document.getElementById('resCartons').innerText = cartons;
+      document.getElementById('resCatches').innerText = catches;
+      document.getElementById('resPacks').innerText = packs;
+      document.getElementById('resStrips').innerText = Math.floor(looseUnits / stripSize);
+      saveSessionState();
+      renderSummaryTable();
     }
 
     // Generic item detection: case-insensitive whole-word match in Item Description.
@@ -3547,7 +3604,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize'].forEach(id => {
       document.getElementById(id).addEventListener('input', () => {
-        if (pickList.length > 0) calculateLogicalBreakdown(pickList[currentIndex].finalPickedQty);
+        if (pickList.length > 0) {
+          updatePackageQuantityControlStates();
+          calculateLogicalBreakdown(pickList[currentIndex].finalPickedQty);
+        }
       });
     });
 
