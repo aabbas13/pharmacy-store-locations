@@ -453,7 +453,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div>
 
-    <button id="startBtn" class="start-btn" onclick="processAndStart()" disabled>Start Picking</button>
+    <button id="startBtn" class="start-btn" onclick="processAndStart().catch(error => { console.error(error); alert(error.message || error); })" disabled>Start Picking</button>
   </div>
 
   <div id="viewToggleCard" class="view-toggle hidden">
@@ -476,6 +476,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   <!-- Step 2A: Item 1-by-1 View -->
   <div id="pickerCard" class="card hidden">
+    <details class="picker-secondary-details" style="margin-bottom:8px;">
+      <summary>➕ Add more pick slips to this session</summary>
+      <div style="padding:8px 0;">
+        <label for="addPickSlipsInput">Choose one or more additional .xls / .xlsx pick slips</label>
+        <input id="addPickSlipsInput" type="file" accept=".xlsx,.xls" multiple style="display:block;max-width:100%;margin:6px 0;">
+        <button type="button" class="secondary" onclick="appendSelectedPickSlips()" style="width:100%;">Add to picking queue</button>
+        <small id="addPickSlipsStatus" role="status" style="display:block;margin-top:6px;color:#475569;">Additional slips will be added after the current queue. Their original D2 IDs, headers, and footers are retained for export.</small>
+      </div>
+    </details>
     <!-- Live Item / Description Search -->
     <details class="picker-secondary-details">
       <summary>🔍 Find another item</summary>
@@ -622,6 +631,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <table>
         <thead>
           <tr>
+            <th>Slip</th>
             <th>Line</th>
             <th>Item</th>
             <th>Item Description</th>
@@ -876,6 +886,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     let confirmedPickCount = 0;
     let placementUpdateRequired = false;
     let pickList = [];
+    let reportMetadataList = [];
+    let activeImportReportId = '';
     let packagingDb = {};
 
     function normalizePackagePart(value) {
@@ -1110,7 +1122,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         pickList, packagingDb, currentIndex, locationMap, moveOrderNum, customerName,
         pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
         rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges,
-        pickSlipDate, pickedByIdentity
+        pickSlipDate, pickedByIdentity, reportMetadataList
       };
     }
 
@@ -1214,6 +1226,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       rawFooterRows = saved.rawFooterRows || [];
       irFooterRow = saved.irFooterRow || [];
       pickedByIdentity = saved.pickedByIdentity || null;
+      reportMetadataList = Array.isArray(saved.reportMetadataList) ? saved.reportMetadataList : [];
       originalColWidths = saved.originalColWidths || [];
       originalMerges = saved.originalMerges || [];
       saveSessionState();
@@ -1389,6 +1402,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       sessionStorage.setItem('hmc_originalMerges', JSON.stringify(originalMerges));
       sessionStorage.setItem('hmc_sessionId', sessionId);
       sessionStorage.setItem('hmc_pickedByIdentity', JSON.stringify(pickedByIdentity));
+      sessionStorage.setItem('hmc_reportMetadataList', JSON.stringify(reportMetadataList));
       schedulePersistentSessionSave();
     }
 
@@ -1409,6 +1423,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const savedMerges = sessionStorage.getItem('hmc_originalMerges');
       const savedSessionId = sessionStorage.getItem('hmc_sessionId');
       const savedPickedByIdentity = sessionStorage.getItem('hmc_pickedByIdentity');
+      const savedReportMetadata = sessionStorage.getItem('hmc_reportMetadataList');
 
       if (savedList) pickList = JSON.parse(savedList);
       if (savedPkg) packagingDb = JSON.parse(savedPkg);
@@ -1422,6 +1437,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       placementUpdateRequired = false;
       if (savedSessionId) sessionId = savedSessionId;
       if (savedPickedByIdentity) pickedByIdentity = JSON.parse(savedPickedByIdentity);
+      if (savedReportMetadata) reportMetadataList = JSON.parse(savedReportMetadata);
       if (savedMo) moveOrderNum = savedMo;
       if (savedCust) customerName = savedCust;
       if (savedHeader) rawHeaderMatrix = JSON.parse(savedHeader);
@@ -1498,9 +1514,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function updateHeaderDisplay() {
-      document.getElementById('headerTitle').innerText = `MO: ${moveOrderNum}`;
-      document.getElementById('headerSubtitle').innerText = `Customer: ${customerName}`;
-      setPickSlipDateHeader(pickSlipDate);
+      const currentItem = pickList[currentIndex];
+      const currentReport = currentItem?.reportId
+        ? reportMetadataList.find(report => report.id === currentItem.reportId)
+        : null;
+      const displayMoveOrder = currentReport?.moveOrderNum || moveOrderNum;
+      const displayCustomer = currentReport?.customerName || customerName;
+      const displayDate = currentReport?.pickSlipDate || pickSlipDate;
+      document.getElementById('headerTitle').innerText = `MO: ${displayMoveOrder}`;
+      document.getElementById('headerSubtitle').innerText = `Customer: ${displayCustomer}${reportMetadataList.length > 1 ? ` · Slip ${reportMetadataList.findIndex(report => report.id === currentItem?.reportId) + 1} of ${reportMetadataList.length}` : ''}`;
+      setPickSlipDateHeader(displayDate);
     }
 
     async function clearSessionAndReset() {
@@ -1515,7 +1538,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           'hmc_locationMap', 'hmc_locationMasterRows', 'hmc_locationMasterHeaders',
           'hmc_locationMasterSheetName', 'hmc_pickedPlacementLocation', 'hmc_confirmedPickCount', 'hmc_placementUpdateRequired',
           'hmc_moveOrderNum', 'hmc_customerName', 'hmc_pickSlipDate', 'hmc_rawHeaderMatrix',
-          'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges', 'hmc_sessionId'
+          'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges', 'hmc_sessionId', 'hmc_reportMetadataList'
         ].forEach(key => sessionStorage.removeItem(key));
         location.reload();
       } catch (error) {
@@ -2391,7 +2414,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const effectiveSecondary = secondaryField === 'none' ? 'line' : secondaryField;
       const effectiveSecondaryOrder = secondaryField === 'none' ? 'asc' : secondaryOrder;
 
+      const reportOrder = new Map((reportMetadataList || []).map((report, index) => [report.id, index]));
       pickList.sort((a, b) => {
+        if (a.reportId && b.reportId && a.reportId !== b.reportId) {
+          const rankA = reportOrder.has(a.reportId) ? reportOrder.get(a.reportId) : Number.MAX_SAFE_INTEGER;
+          const rankB = reportOrder.has(b.reportId) ? reportOrder.get(b.reportId) : Number.MAX_SAFE_INTEGER;
+          if (rankA !== rankB) return rankA - rankB;
+        }
         if (primaryField === 'location') {
           const locA = getPrimaryLocation(a);
           const locB = getPrimaryLocation(b);
@@ -2542,12 +2571,107 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return [];
     }
 
-    function processAndStart() {
-      const file = document.getElementById('pickSlipFile').files[0];
+    function createCurrentReportMetadata(file, reportId) {
+      return {
+        id: reportId,
+        fileName: file?.name || 'Pick Slip',
+        sessionId: String(sessionId || ''),
+        moveOrderNum,
+        customerName,
+        pickSlipDate,
+        rawHeaderMatrix: (rawHeaderMatrix || []).map(row => row.slice()),
+        rawFooterRows: (rawFooterRows || []).map(row => row.slice()),
+        irFooterRow: (irFooterRow || []).slice(),
+        originalColWidths: (originalColWidths || []).map(column => ({ ...column })),
+        originalMerges: (originalMerges || []).map(merge => ({ ...merge })),
+        pickedByIdentity: pickedByIdentity ? { ...pickedByIdentity } : null
+      };
+    }
+
+    function capturePickerImportState() {
+      return {
+        sessionId, pickList, currentIndex, moveOrderNum, customerName, pickSlipDate,
+        rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges,
+        pickedByIdentity, pickedPlacementLocation, confirmedPickCount, placementUpdateRequired,
+        reportMetadataList
+      };
+    }
+
+    function restorePickerImportState(state) {
+      Object.assign(window, {});
+      sessionId = state.sessionId; pickList = state.pickList; currentIndex = state.currentIndex;
+      moveOrderNum = state.moveOrderNum; customerName = state.customerName; pickSlipDate = state.pickSlipDate;
+      rawHeaderMatrix = state.rawHeaderMatrix; rawFooterRows = state.rawFooterRows; irFooterRow = state.irFooterRow;
+      originalColWidths = state.originalColWidths; originalMerges = state.originalMerges;
+      pickedByIdentity = state.pickedByIdentity; pickedPlacementLocation = state.pickedPlacementLocation;
+      confirmedPickCount = state.confirmedPickCount; placementUpdateRequired = state.placementUpdateRequired;
+      reportMetadataList = state.reportMetadataList || [];
+    }
+
+    function resetPickerImportContext() {
+      sessionId = ''; pickList = []; currentIndex = 0;
+      moveOrderNum = 'UNKNOWN_MO'; customerName = 'UNKNOWN_CUSTOMER'; pickSlipDate = '';
+      rawHeaderMatrix = []; rawFooterRows = []; irFooterRow = []; originalColWidths = []; originalMerges = [];
+      pickedByIdentity = null; pickedPlacementLocation = ''; confirmedPickCount = 0; placementUpdateRequired = false;
+      reportMetadataList = [];
+    }
+
+    async function appendSelectedPickSlips() {
+      const input = document.getElementById('addPickSlipsInput');
+      const files = Array.from(input.files || []);
+      const status = document.getElementById('addPickSlipsStatus');
+      if (!files.length) { status.textContent = 'Choose at least one pick slip first.'; return; }
+      const savedState = capturePickerImportState();
+      if (!savedState.reportMetadataList?.length && savedState.pickList.length) {
+        const legacyReportId = 'report-legacy-' + Date.now();
+        savedState.pickList.forEach(item => { item.reportId = legacyReportId; });
+        savedState.reportMetadataList = [createCurrentReportMetadata({ name: 'Current Pick Slip' }, legacyReportId)];
+      } else if (savedState.reportMetadataList?.length === 1) {
+        const existingReportId = savedState.reportMetadataList[0].id;
+        savedState.pickList.forEach(item => { if (!item.reportId) item.reportId = existingReportId; });
+      }
+      const parsedReports = [];
+      const addButton = input.parentElement.querySelector('button');
+      addButton.disabled = true;
+      status.textContent = `Reading ${files.length} additional pick slip${files.length === 1 ? '' : 's'}…`;
+      try {
+        for (const file of files) {
+          resetPickerImportContext();
+          activeImportReportId = 'report-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+          const parsed = await processAndStart({ file, additional: true });
+          parsedReports.push(parsed);
+        }
+        restorePickerImportState(savedState);
+        const newItems = parsedReports.flatMap(parsed => parsed.items);
+        reportMetadataList = [...(savedState.reportMetadataList || []), ...parsedReports.map(parsed => parsed.report)];
+        pickList = [...savedState.pickList, ...newItems];
+        saveSessionState();
+        updateHeaderDisplay();
+        renderCurrentItem();
+        renderSummaryTable();
+        status.textContent = `${parsedReports.length} report${parsedReports.length === 1 ? '' : 's'} added. ${newItems.length} items joined the end of the current picking queue.`;
+        document.getElementById('itemCounter').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (error) {
+        restorePickerImportState(savedState);
+        status.textContent = `Could not add the selected report${files.length === 1 ? '' : 's'}: ${error.message || error}`;
+        alert(status.textContent);
+      } finally {
+        activeImportReportId = '';
+        input.value = '';
+        addButton.disabled = false;
+      }
+    }
+    function processAndStart(options = {}) {
+      if (!options.additional) {
+        activeImportReportId = 'report-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+      const file = options.file || document.getElementById('pickSlipFile').files[0];
       if (!file) return;
 
+      return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async function(e) {
+        try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellStyles: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -2557,19 +2681,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const d2Display = d2Cell ? String(d2Cell.w ?? '').trim() : '';
         const d2Identifier = String(d2Display || (d2Cell?.v ?? '')).trim();
         sessionId = d2Identifier;
-        if (sessionId) {
+        if (sessionId && !options.additional) {
           try {
             const savedSession = await loadPersistentSession(sessionId);
             if (savedSession && Array.isArray(savedSession.pickList) && savedSession.pickList.length) {
               await restorePersistentSession(savedSession);
+              resolve({ restored: true });
               return;
             }
           } catch (error) {
             console.warn('Could not check for a saved D2 session:', error);
-            alert(`Could not check the saved session for D2 ${sessionId}. Your existing progress has been left untouched. Check browser storage and try again.`);
+            console.warn(`Could not check the saved session for D2 ${sessionId}.`, error);
+            reject(error);
             return;
           }
-        } else {
+        } else if (!options.additional) {
           alert('Cell D2 is blank in this pick slip. Picking can continue, but this slip cannot be saved and resumed by D2.');
           const status = document.getElementById('sessionPersistenceStatus');
           if (status) {
@@ -2610,7 +2736,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
 
         if (headerIdx === -1) {
-          alert("Could not detect standard HMC Pick Slip table structure.");
+          reject(new Error('Could not detect the HMC pick slip table in ' + file.name + '.'));
           return;
         }
 
@@ -2740,6 +2866,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             : 'N/A';
 
           pickList.push({
+            reportId: activeImportReportId,
             raw: row,
             line: lineIdx !== -1 ? (parseInt(row[lineIdx]) || (i - headerIdx)) : (i - headerIdx),
             code: itemCode,
@@ -2766,6 +2893,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
         sortPickList(primaryField, primaryOrder, secondaryField, secondaryOrder);
 
+        pickList.forEach(item => { item.reportId = activeImportReportId; });
+        const reportMetadata = createCurrentReportMetadata(file, activeImportReportId);
+        reportMetadataList = [reportMetadata];
+        if (options.additional) {
+          resolve({ report: reportMetadata, items: pickList.slice() });
+          return;
+        }
+
         currentIndex = 0;
         document.getElementById('pickedByMethod').value = 'name';
         document.getElementById('pickedByValue').value = '';
@@ -2773,8 +2908,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         updatePickedByMethod();
         document.getElementById('pickedBySetup').style.display = 'flex';
         document.getElementById('pickedByValue').focus();
+        resolve({ report: reportMetadata, items: pickList.slice() });
+        } catch (error) {
+          reject(error);
+        }
       };
+      reader.onerror = () => reject(reader.error || new Error('Could not read ' + file.name + '.'));
       reader.readAsArrayBuffer(file);
+      });
     }
 
     function updatePickedByMethod() {
@@ -3506,6 +3647,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function renderCurrentItem() {
+      updateHeaderDisplay();
       const item = pickList[currentIndex];
 
       document.getElementById('itemCounter').innerText = `Item ${currentIndex + 1} of ${pickList.length}`;
@@ -3579,6 +3721,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           ? `<span style="color:var(--success); font-weight:bold;">PICKED</span>`
           : `<span style="color:var(--warning); font-weight:bold;">PENDING</span>`;
 
+        const reportIndex = reportMetadataList.findIndex(report => report.id === item.reportId);
+        const reportLabel = reportMetadataList.length > 1 ? `Slip ${reportIndex + 1}` : '';
         const isAdjusted = item.finalPickedQty !== item.requestedQty;
         const pickedTick = item.itemPicked ? ' ✓' : '';
         const requestedQtyDisplay = !isAdjusted
@@ -3587,6 +3731,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const revisedQtyDisplay = isAdjusted ? `${item.finalPickedQty}${pickedTick}` : '';
 
         tr.innerHTML = `
+          <td>${reportLabel}</td>
           <td>${item.line}</td>
           <td><strong>${item.code}</strong></td>
           <td>${item.name}</td>
@@ -3654,14 +3799,51 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     // Export 1: Final Confirmed Pick Slip Excel Export using ExcelJS with Precise Alignments and Uploaded File Widths
     async function exportUpdatedExcel() {
-      if (pickList.length === 0) return;
-      if (typeof ExcelJS === 'undefined') {
-        throw new Error('The Excel report component did not load. Check the internet connection, refresh the picker, and try again.');
-      }
+      if (!pickList.length) return;
+      if (typeof ExcelJS === 'undefined') throw new Error('The Excel report component did not load. Check the internet connection, refresh the picker, and try again.');
+      if (typeof JSZip === 'undefined') throw new Error('Embedded JSZip failed to load; print headers and footers cannot be safely generated.');
 
       const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet("Confirmed Pick Slip");
+      const savedState = capturePickerImportState();
+      const fallbackReport = {
+        id: '', fileName: 'Pick Slip', moveOrderNum, customerName, pickSlipDate,
+        rawHeaderMatrix, rawFooterRows, irFooterRow, originalColWidths, originalMerges
+      };
+      const reports = reportMetadataList.length ? reportMetadataList : [fallbackReport];
+      const usedSheetNames = new Set();
+      let missingReportFooter = false;
 
+      try {
+        for (let reportIndex = 0; reportIndex < reports.length; reportIndex++) {
+          const report = reports[reportIndex];
+          const reportItems = report.id
+            ? pickList.filter(item => item.reportId === report.id)
+            : pickList;
+          if (!reportItems.length) continue;
+
+          pickList = reportItems;
+          moveOrderNum = report.moveOrderNum || 'UNKNOWN_MO';
+          customerName = report.customerName || 'UNKNOWN_CUSTOMER';
+          pickSlipDate = report.pickSlipDate || '';
+          rawHeaderMatrix = report.rawHeaderMatrix || [];
+          rawFooterRows = report.rawFooterRows || [];
+          irFooterRow = report.irFooterRow || [];
+          originalColWidths = report.originalColWidths || [];
+          originalMerges = report.originalMerges || [];
+          pickedByIdentity = savedState.pickedByIdentity;
+
+          let sheetBaseName = String(moveOrderNum || `Slip ${reportIndex + 1}`)
+            .replace(/[\[\]:*?/\\]/g, ' ')
+            .trim()
+            .slice(0, 31) || `Slip ${reportIndex + 1}`;
+          let sheetName = sheetBaseName;
+          let suffix = 2;
+          while (usedSheetNames.has(sheetName.toLowerCase())) {
+            const ending = ` (${suffix++})`;
+            sheetName = `${sheetBaseName.slice(0, 31 - ending.length)}${ending}`;
+          }
+          usedSheetNames.add(sheetName.toLowerCase());
+          const worksheet = workbook.addWorksheet(sheetName);
       // Column Alignment definitions matching standard HMC pick slip report standards
       const colAlignments = [
         { horizontal: "center", vertical: "middle" },                   // A: Item Code
@@ -4115,71 +4297,58 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
       }
 
-      // Generate & Download Excel File
-      const timestamp = getFormattedTimestamp();
-      const safeMo = moveOrderNum.replace(/[/\\?%*:|"<>]/g, '-');
-      const safeCust = customerName.replace(/[/\\?%*:|"<>]/g, '-');
-      const filename = `PK_${safeMo}_${safeCust}_${timestamp}.xlsx`;
+          if (!reportHasFooter) missingReportFooter = true;
+        }
+      } finally {
+        restorePickerImportState(savedState);
+      }
 
+      if (!workbook.worksheets.length) throw new Error('No report rows were available to export.');
+      const timestamp = getFormattedTimestamp();
+      const safeMo = reports.length === 1
+        ? String(reports[0].moveOrderNum || 'UNKNOWN_MO').replace(/[/\\?%*:|"<>]/g, '-')
+        : 'Multiple_Reports';
+      const safeCust = reports.length === 1
+        ? String(reports[0].customerName || 'UNKNOWN_CUSTOMER').replace(/[/\\?%*:|"<>]/g, '-')
+        : `${reports.length}_Pick_Slips`;
+      const filename = `PK_${safeMo}_${safeCust}_${timestamp}.xlsx`;
       let buffer = await workbook.xlsx.writeBuffer();
 
-      // Enforce dynamic right-footer page numbering and, when present, the custom footer
-      // in the worksheet XML because Excel's Page Setup reads these fields.
-      if (typeof JSZip === 'undefined') {
-        throw new Error('Embedded JSZip failed to load; print headers and footers cannot be safely generated.');
-      }
+      // Each pick slip is a separate worksheet, so its print-title rows and
+      // custom footer stay with that report when the workbook is printed.
+      const zip = await JSZip.loadAsync(buffer);
       const escapeXml = value => String(value)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&apos;');
-      const headerFooterXml =
-        `<headerFooter differentFirst="0" differentOddEven="0">` +
-        `<oddFooter>${escapeXml(completeFooterCode)}</oddFooter>` +
-        `<evenFooter>${escapeXml(completeFooterCode)}</evenFooter>` +
-        `<firstFooter>${escapeXml(completeFooterCode)}</firstFooter>` +
-        `</headerFooter>`;
-
-      const zip = await JSZip.loadAsync(buffer);
-      const sheetPath = 'xl/worksheets/sheet1.xml';
-      const sheetEntry = zip.file(sheetPath);
-      if (!sheetEntry) throw new Error('Could not find xl/worksheets/sheet1.xml in exported workbook.');
-      let sheetXml = await sheetEntry.async('string');
-
-      // Replace any existing header/footer, then insert in worksheet XML order.
-      sheetXml = sheetXml.replace(/<headerFooter\b[\s\S]*?<\/headerFooter>/g, '');
-      if (/<pageSetup\b[^>]*\/>/.test(sheetXml)) {
-        sheetXml = sheetXml.replace(/(<pageSetup\b[^>]*\/>)/, `$1${headerFooterXml}`);
-      } else if (/<pageMargins\b[^>]*\/>/.test(sheetXml)) {
-        sheetXml = sheetXml.replace(/(<pageMargins\b[^>]*\/>)/, `$1${headerFooterXml}`);
-      } else {
-        sheetXml = sheetXml.replace(/<\/worksheet>/, `${headerFooterXml}</worksheet>`);
+      for (let index = 0; index < workbook.worksheets.length; index++) {
+        const worksheet = workbook.worksheets[index];
+        const sheetPath = `xl/worksheets/sheet${index + 1}.xml`;
+        const sheetEntry = zip.file(sheetPath);
+        if (!sheetEntry) throw new Error(`Could not find ${sheetPath} in the generated workbook.`);
+        let sheetXml = await sheetEntry.async('string');
+        const footerCode = worksheet.__hmcFooterCode || '&RPage &P of &N';
+        const headerFooterXml = `<headerFooter differentFirst="0" differentOddEven="0"><oddFooter>${escapeXml(footerCode)}</oddFooter><evenFooter>${escapeXml(footerCode)}</evenFooter><firstFooter>${escapeXml(footerCode)}</firstFooter></headerFooter>`;
+        sheetXml = sheetXml.replace(/<headerFooter\b[\s\S]*?<\/headerFooter>/g, '');
+        if (/<pageSetup\b[^>]*\/>/.test(sheetXml)) sheetXml = sheetXml.replace(/(<pageSetup\b[^>]*\/>)/, `$1${headerFooterXml}`);
+        else if (/<pageMargins\b[^>]*\/>/.test(sheetXml)) sheetXml = sheetXml.replace(/(<pageMargins\b[^>]*\/>)/, `$1${headerFooterXml}`);
+        else sheetXml = sheetXml.replace(/<\/worksheet>/, `${headerFooterXml}</worksheet>`);
+        if (!/<headerFooter\b/.test(sheetXml)) throw new Error(`Print footer could not be added to ${worksheet.name}.`);
+        zip.file(sheetPath, sheetXml);
       }
-      if (!/<headerFooter\b/.test(sheetXml)) {
-        throw new Error('Page numbering could not be inserted into the generated worksheet.');
-      }
-
-      zip.file(sheetPath, sheetXml);
       buffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
-
-      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      }, 1000);
-      if (!reportHasFooter) {
-        alert('The report was downloaded, but no IR/signature footer row was found in the pick slip, so the repeated print footer was omitted.');
-      }
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => { link.remove(); window.URL.revokeObjectURL(url); }, 1000);
+      if (missingReportFooter) alert('The workbook was downloaded, but at least one pick slip had no IR/signature footer row, so that sheet uses only the dynamic page number footer.');
     }
-
     // Export 2: Updated Location Master File
     function buildUpdatedLocationExportRows() {
       const codeAliases = ['itemcode', 'itemnumber', 'item', 'code'];
@@ -4434,41 +4603,44 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         sourceReportBase64=arrayBufferToBase64(bytes);
         try { localStorage.setItem(SOURCE_REPORT_KEY,sourceReportBase64); } catch (storageError) { try { localStorage.removeItem(SOURCE_REPORT_KEY); } catch (cleanupError) {} console.warn('The source workbook could not be saved for a later export; keep this tab open or re-upload the picking report before exporting.',storageError); }
         const book=XLSX.read(bytes,{type:'array',cellDates:true});
-        const sheet=book.Sheets[book.SheetNames[0]];
-        const pickSlipDate = getPickSlipDateFromSheet(sheet);
-        const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false,blankrows:true});
-        const headerAt=matrix.findIndex(row=>{
-          const hs=row.map(normalizeHeader);
-          return (hs.includes('itemcode')||hs.includes('itemnumber')||hs.includes('item')) && (hs.includes('lotserial')||hs.includes('lot')||hs.includes('serial')) && (hs.includes('quantityrequested')||hs.includes('quantity')||hs.includes('qtyrequested'));
-        });
-        if(headerAt<0) throw new Error('Could not find the pick report columns (Item Code, Lot/Serial, and Quantity). Select the generated confirmation workbook.');
-        const headers=matrix[headerAt];
-        const codeCol=findHeader(headers,['itemcode','itemnumber','item']);
-        const nameCol=findHeader(headers,['itemdescription','description','itemname']);
-        const locCol=findHeader(headers,['location','storelocation','binlocation']);
-        const lotCol=findHeader(headers,['lotserial','lot','serial']);
-        const expCol=findHeader(headers,['expirydate','expiry','expirationdate','expdate']);
-        const reqCol=findHeader(headers,['quantityrequested','quantity','qtyrequested','requestedqty']);
-        const revisedCol=findHeader(headers,['quantityrevised','revisedquantity','qtyrevised','revisedqty']);
-        const statusCol=findHeader(headers,['status']);
-        const remarksCol=findHeader(headers,['remarkscomments','remarks','comments']);
         const rows=[];
-        for(let i=headerAt+1;i<matrix.length;i++){
-          const raw=matrix[i]; if(!String(raw[codeCol]??'').trim()) continue;
-          const status=statusCol>=0?String(raw[statusCol]??'').trim().toUpperCase():'';
-          const req=cleanQty(raw[reqCol]); const revised=revisedCol>=0?cleanQty(raw[revisedCol]):'';
-          const qty=revised?revised:req;
-          const code=String(raw[codeCol]).trim();
-          const pending=status==='PENDING';
-          const hasRevisedQuantity=revisedCol>=0&&Boolean(revised);
-          rows.push({code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,quantityColumn:(hasRevisedQuantity?revisedCol:reqCol)+1,remarksColumn:remarksCol>=0?remarksCol+1:0,matched:false,comment:''});
-        }
-        if(!rows.length) throw new Error('No item rows were found in this report.');
-        session={fileName:file.name,importedAt:new Date().toISOString(),pickSlipDate,rows,checker:'',checkerIdentity:null,notes:''};
+        const pickSlipDates=[];
+        book.SheetNames.forEach((sheetName,sheetIndex)=>{
+          const sheet=book.Sheets[sheetName];
+          const pickSlipDate=getPickSlipDateFromSheet(sheet);
+          if(pickSlipDate)pickSlipDates.push(pickSlipDate);
+          const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false,blankrows:true});
+          const headerAt=matrix.findIndex(row=>{
+            const hs=row.map(normalizeHeader);
+            return (hs.includes('itemcode')||hs.includes('itemnumber')||hs.includes('item')) && (hs.includes('lotserial')||hs.includes('lot')||hs.includes('serial')) && (hs.includes('quantityrequested')||hs.includes('quantity')||hs.includes('qtyrequested'));
+          });
+          if(headerAt<0)return;
+          const headers=matrix[headerAt];
+          const codeCol=findHeader(headers,['itemcode','itemnumber','item']);
+          const nameCol=findHeader(headers,['itemdescription','description','itemname']);
+          const locCol=findHeader(headers,['location','storelocation','binlocation']);
+          const lotCol=findHeader(headers,['lotserial','lot','serial']);
+          const expCol=findHeader(headers,['expirydate','expiry','expirationdate','expdate']);
+          const reqCol=findHeader(headers,['quantityrequested','quantity','qtyrequested','requestedqty']);
+          const revisedCol=findHeader(headers,['quantityrevised','revisedquantity','qtyrevised','revisedqty']);
+          const statusCol=findHeader(headers,['status']);
+          const remarksCol=findHeader(headers,['remarkscomments','remarks','comments']);
+          for(let i=headerAt+1;i<matrix.length;i++){
+            const raw=matrix[i]; if(!String(raw[codeCol]??'').trim()) continue;
+            const status=statusCol>=0?String(raw[statusCol]??'').trim().toUpperCase():'';
+            const req=cleanQty(raw[reqCol]); const revised=revisedCol>=0?cleanQty(raw[revisedCol]):'';
+            const qty=revised?revised:req;
+            const code=String(raw[codeCol]).trim();
+            const pending=status==='PENDING';
+            const hasRevisedQuantity=revisedCol>=0&&Boolean(revised);
+            rows.push({sheetIndex,sheetName,pickSlipDate,code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,quantityColumn:(hasRevisedQuantity?revisedCol:reqCol)+1,remarksColumn:remarksCol>=0?remarksCol+1:0,matched:false,comment:''});
+          }
+        });
+        if(!rows.length) throw new Error('No item rows were found in the workbook sheets. Select the generated confirmation workbook.');
+        session={fileName:file.name,importedAt:new Date().toISOString(),pickSlipDate:pickSlipDates[0]||'',sheetNames:book.SheetNames,rows,checker:'',checkerIdentity:null,notes:''};
         current=0; $('checkerIdentityMethod').value='name';$('checkerIdentityValue').value='';clearCheckerSignature();updateCheckerIdentityMethod();$('checkerIdentitySetup').style.display='flex';$('checkerIdentityValue').focus();
       }catch(error){ $('importStatus').textContent=error.message||String(error); }
-    }
-    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
+    }    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
     function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};session.rows.forEach(row=>{if(typeof row.matched!=='boolean'){const checks=row.checks||{};row.matched=LEGACY_FIELD_KEYS.every(key=>checks[key]?.state==='match');const oldNotes=LEGACY_FIELD_KEYS.map(key=>checks[key]?.state==='issue'&&checks[key]?.note?checks[key].note:'').filter(Boolean);if(!row.comment&&oldNotes.length)row.comment=oldNotes.join(' | ');}if(typeof row.comment!=='string')row.comment='';});current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
     function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionPickSlipDate').textContent=session.pickSlipDate?'Pick slip date: '+session.pickSlipDate:'';$('sessionPickSlipDate').dataset.pickSlipDate=session.pickSlipDate||'';setPickSlipDateHeader(session.pickSlipDate);$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
     function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const comments=session.rows.filter(row=>String(row.comment||'').trim()).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=comments;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=comments?`${comments} line${comments===1?' has':'s have'} comments. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
@@ -4514,51 +4686,56 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const zip = await JSZip.loadAsync(base64ToArrayBuffer(sourceReportBase64));
         const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
         const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('string');
-        let sheetPath = 'xl/worksheets/sheet1.xml';
-        const firstSheet = workbookXml?.match(/<sheet\b[^>]*r:id="([^"]+)"/);
-        if (firstSheet && relsXml) {
-          const escapedId = firstSheet[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!workbookXml || !relsXml) throw new Error('Could not read the workbook sheet list.');
+        const sheetDescriptors = [...workbookXml.matchAll(/<sheet\b[^>]*\/?\s*>/g)].map(match => {
+          const relationId = match[0].match(/\br:id="([^"]+)"/)?.[1];
+          if (!relationId) return null;
+          const escapedId = relationId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           const relation = relsXml.match(new RegExp(`<Relationship\\b(?=[^>]*\\bId="${escapedId}")[^>]*\\bTarget="([^"]+)"`));
-          if (relation) {
-            const target = relation[1].replace(/^\.\//, '');
-            sheetPath = target.startsWith('/') ? target.slice(1) : `xl/${target}`;
-          }
-        }
-
-        const sheetFile = zip.file(sheetPath);
-        if (!sheetFile) throw new Error('Could not find the original picking report worksheet.');
-        let sheetXml = await sheetFile.async('string');
+          if (!relation) return null;
+          const target = relation[1].replace(/^\.\//, '');
+          return { path: target.startsWith('/') ? target.slice(1) : `xl/${target}` };
+        });
         const sharedStringsXml = await zip.file('xl/sharedStrings.xml')?.async('string') || '';
-
+        const rowsBySheet = new Map();
         for (const row of session.rows) {
-          if (!row.sourceRow) continue;
-          if (row.matched) {
-            const qtyAddress = cellAddress(Number(row.quantityColumn) || 8, Number(row.sourceRow));
-            const quantityText = readXmlCellText(sheetXml, qtyAddress, sharedStringsXml);
-            const checkCount = (quantityText.match(/[✓✔]/g) || []).length;
-            if (checkCount < 2) {
-              const baseText = quantityText.trimEnd();
-              sheetXml = writeXmlCellTextWithLargeChecks(sheetXml, qtyAddress, `${baseText}${baseText ? ' ' : ''}✓`);
+          const sheetIndex = Number(row.sheetIndex) || 0;
+          if (!rowsBySheet.has(sheetIndex)) rowsBySheet.set(sheetIndex, []);
+          rowsBySheet.get(sheetIndex).push(row);
+        }
+        for (const [sheetIndex, rows] of rowsBySheet) {
+          const sheetPath = sheetDescriptors[sheetIndex]?.path;
+          if (!sheetPath) throw new Error(`Could not locate worksheet ${sheetIndex + 1} in the original workbook.`);
+          const sheetFile = zip.file(sheetPath);
+          if (!sheetFile) throw new Error(`Could not find worksheet ${sheetIndex + 1} in the original workbook.`);
+          let sheetXml = await sheetFile.async('string');
+          for (const row of rows) {
+            if (!row.sourceRow) continue;
+            if (row.matched) {
+              const qtyAddress = cellAddress(Number(row.quantityColumn) || 8, Number(row.sourceRow));
+              const quantityText = readXmlCellText(sheetXml, qtyAddress, sharedStringsXml);
+              const checkCount = (quantityText.match(/[✓✔]/g) || []).length;
+              if (checkCount < 2) {
+                const baseText = quantityText.trimEnd();
+                sheetXml = writeXmlCellTextWithLargeChecks(sheetXml, qtyAddress, `${baseText}${baseText ? ' ' : ''}✓`);
+              }
+            }
+            const comment = String(row.comment || '').trim();
+            if (comment && Number(row.remarksColumn) > 0) {
+              const remarksAddress = cellAddress(Number(row.remarksColumn), Number(row.sourceRow));
+              const originalRemarks = readXmlCellText(sheetXml, remarksAddress, sharedStringsXml).trim();
+              const combined = originalRemarks ? `${originalRemarks} | Double-check: ${comment}` : `Double-check: ${comment}`;
+              sheetXml = writeXmlCellText(sheetXml, remarksAddress, combined);
             }
           }
-
-          const comment = String(row.comment || '').trim();
-          if (comment && Number(row.remarksColumn) > 0) {
-            const remarksAddress = cellAddress(Number(row.remarksColumn), Number(row.sourceRow));
-            const originalRemarks = readXmlCellText(sheetXml, remarksAddress, sharedStringsXml).trim();
-            const combined = originalRemarks
-              ? `${originalRemarks} | Double-check: ${comment}`
-              : `Double-check: ${comment}`;
-            sheetXml = writeXmlCellText(sheetXml, remarksAddress, combined);
+          const worksheetXmlCheck = new DOMParser().parseFromString(sheetXml, 'application/xml');
+          if (worksheetXmlCheck.querySelector('parsererror')) {
+            throw new Error(`The edited worksheet ${sheetIndex + 1} did not validate, so no workbook was downloaded.`);
           }
+          zip.file(sheetPath, sheetXml);
         }
-
-        const worksheetXmlCheck = new DOMParser().parseFromString(sheetXml, 'application/xml');
-        if (worksheetXmlCheck.querySelector('parsererror')) {
-          throw new Error('The edited worksheet XML did not validate, so no workbook was downloaded. Re-upload the picking report and retry.');
-        }
-        zip.file(sheetPath, sheetXml);
-        const blob = new Blob([await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' })], {
+        const updatedWorkbook = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' });
+        const blob = new Blob([updatedWorkbook], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         });
         const url = URL.createObjectURL(blob);
