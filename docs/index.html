@@ -416,6 +416,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <option value="location" selected>Location (Pick Path Level-by-Bay)</option>
             <option value="uom">UOM</option>
             <option value="line">Line Number</option>
+            <option value="original">Original report order</option>
             <option value="code">Item Code</option>
             <option value="name">Item Description</option>
             <option value="status">Status (Pending/Picked)</option>
@@ -438,6 +439,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <option value="location">Location (Pick Path Level-by-Bay)</option>
             <option value="uom">UOM</option>
             <option value="line" selected>Line Number (Fallback)</option>
+            <option value="original">Original report order</option>
             <option value="code">Item Code</option>
             <option value="name">Item Description</option>
             <option value="status">Status (Pending/Picked)</option>
@@ -495,6 +497,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </details>
 
+    <details class="picker-secondary-details" style="margin:8px 0;">
+      <summary>➕ Add an item to this picking list</summary>
+      <div style="padding:8px 0;">
+        <p style="margin:0 0 8px;color:#475569;font-size:.8rem;">Copy the current item line into the queue. You can repeat this on any item to add another copy.</p>
+        <button type="button" class="secondary" onclick="addAnotherItemCopy()" style="width:100%;">＋ Copy current item line into list</button>
+        <small id="addItemCopyStatus" role="status" style="display:block;margin-top:6px;color:#475569;"></small>
+      </div>
+    </details>
+
     <div class="item-header">
       <span class="item-counter" id="itemCounter">Item 1 of --</span>
       <span id="statusBadge" class="status-badge badge-pending">PENDING</span>
@@ -505,21 +516,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div class="item-name" id="itemNameDisplay">--</div>
 
-    <div class="location-box" id="locationBox">
-      <div>
-        <div class="location-title">SHELF LOCATION <span id="fridgeLocationBadge" class="fridge-location-badge" hidden>FRIDGE</span></div>
-        <div class="location-value" id="locDisplay">--</div>
+    <details id="locationStageDetails" class="picker-secondary-details" open>
+      <summary>📍 Step 1 · Location</summary>
+      <div class="location-box" id="locationBox">
+        <div>
+          <div class="location-title">SHELF LOCATION <span id="fridgeLocationBadge" class="fridge-location-badge" hidden>FRIDGE</span></div>
+          <div class="location-value" id="locDisplay">--</div>
+        </div>
+        <button class="btn-edit-loc" onclick="openLocationEditModal()">✏️ Edit</button>
       </div>
-      <button class="btn-edit-loc" onclick="openLocationEditModal()">✏️ Edit</button>
-    </div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="secondary" onclick="speakCurrentLocation()" style="flex:1;">🔊 Read location</button>
+        <button id="locationConfirmBtn" type="button" class="btn-lot" onclick="confirmCurrentLocation()" style="flex:1;">✓ Location confirmed</button>
+      </div>
+    </details>
 
-    <div class="item-meta">
-      <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Read lot</button></div>
-      <button id="lotConfirmBtn" class="btn-lot" onclick="toggleLotCheck()">⚠️ Check & Confirm Lot First</button>
-      <div><b>EXP</b><br><span id="expDisplay"></span></div>
-    </div>
+    <details id="lotStageDetails" class="picker-secondary-details hidden">
+      <summary>🏷️ Step 2 · Lot and expiry</summary>
+      <div class="item-meta">
+        <div style="min-width:0;"><b>LOT / SERIAL</b><span id="lotDisplay" class="lot-value">--</span><button type="button" class="secondary speak-lot-btn" id="speakLotBtn" onclick="toggleLotSpeech()">🔊 Read lot</button></div>
+        <button id="lotConfirmBtn" class="btn-lot" onclick="toggleLotCheck()">⚠️ Confirm Lot & Expiry</button>
+        <div><b>EXP</b><br><span id="expDisplay"></span></div>
+      </div>
+    </details>
 
-    <section id="packageDetails" class="picker-secondary-details">
+    <details id="packageDetails" class="picker-secondary-details">
+      <summary>📦 Step 3 · Quantity and packaging details</summary>
+      <div>
       <details id="packageIdentityDetails">
         <summary>📦 Package identity</summary>
         <div id="packageIdentityDisplay" style="margin:4px 0 10px;color:var(--muted);font-size:.85rem;"></div>
@@ -564,7 +587,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="calc-box"><div class="calc-val" id="resPacks">0</div><div class="calc-lbl">Packs</div></div>
         <div class="calc-box"><div class="calc-val" id="resStrips">0</div><div class="calc-lbl">Strips</div></div>
       </div>
-    </section>
+      </div>
+    </details>
 
     <!-- Editable Picked Quantity -->
     <div class="qty-edit-box">
@@ -678,6 +702,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div style="display:flex; flex-direction:column; gap:10px;">
         <button class="start-btn" style="margin:0;" onclick="generateFinalReport('location')">📍 Sort by Locations</button>
         <button class="secondary" style="width:100%; padding:12px;" onclick="generateFinalReport('line')">🔢 Sort by Line Number</button>
+        <button class="secondary" style="width:100%; padding:12px;" onclick="generateFinalReport('original')">↩️ Original Report Order</button>
         <button class="secondary" style="width:100%; padding:10px;" onclick="closeFinalReportSortModal()">Cancel</button>
       </div>
     </div>
@@ -694,6 +719,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <option value="location">Location (Pick Path Level-by-Bay)</option>
           <option value="uom">UOM</option>
           <option value="line">Line Number</option>
+          <option value="original">Original report order</option>
           <option value="code">Item Code</option>
           <option value="name">Item Description</option>
           <option value="status">Status (Pending/Picked)</option>
@@ -715,6 +741,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <option value="location">Location (Pick Path Level-by-Bay)</option>
           <option value="uom">UOM</option>
           <option value="line" selected>Line Number (Fallback)</option>
+          <option value="original">Original report order</option>
           <option value="code">Item Code</option>
           <option value="name">Item Description</option>
           <option value="status">Status (Pending/Picked)</option>
@@ -827,12 +854,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="workhead"><span class="counter" id="lineCounter">Line 1</span><span id="lineStatus" class="counter"></span></div>
       <div id="reportStatusBadge" class="banner warn hidden"></div>
       <div class="item-code" id="itemCode">—</div><div class="item-name" id="itemName">—</div>
-      <div class="facts">
-        <div class="fact"><span>Location</span><b id="itemLocation">—</b></div>
-        <div class="fact"><span>Lot / Serial</span><b class="lot" id="itemLot">—</b></div>
-        <div class="fact"><span>Expiry</span><b id="itemExpiry">—</b></div>
-        <div class="fact"><span>Report quantity</span><b id="itemQty">—</b></div>
-      </div>
+      <details id="dcLocationDetails" class="fact" open style="margin:8px 0;">
+        <summary style="font-weight:800;cursor:pointer;">📍 Step 1 · Location</summary>
+        <b id="itemLocation" style="display:block;font-size:1.35rem;margin:8px 0;">—</b>
+        <div class="actions"><button class="secondary" id="readLocationBtn" type="button">🔊 Read location</button><button class="primary" id="confirmLocationBtn" type="button">✓ Location confirmed</button></div>
+      </details>
+      <details id="dcLotDetails" class="fact hidden" style="margin:8px 0;">
+        <summary style="font-weight:800;cursor:pointer;">🏷️ Step 2 · Lot and expiry</summary>
+        <b class="lot" id="itemLot" style="display:block;margin-top:8px;">—</b>
+        <div class="small" style="margin:4px 0 8px;">Expiry: <b id="itemExpiry">—</b></div>
+        <button class="primary" id="confirmLotStepBtn" type="button" style="width:100%;">✓ Confirm lot and expiry</button>
+      </details>
+      <details id="dcQtyDetails" class="fact" style="margin:8px 0;">
+        <summary style="font-weight:800;cursor:pointer;">📦 Step 3 · Quantity and packaging details</summary>
+        <div style="margin-top:8px;">Report quantity: <b id="itemQty">—</b></div>
+        <div style="margin-top:5px;">Packaging: <b id="itemPackaging">—</b></div>
+      </details>
       <div class="checktitle">Check all report details against the item and slip</div>
       <button class="match" id="matchAllBtn" type="button" style="width:100%;margin:8px 0 12px;min-height:48px;font-weight:800">✓ Match all details</button>
       <label class="fieldlabel" for="lineComment">Comments or issues (optional)</label>
@@ -1688,11 +1725,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const item = pickList[currentIndex];
 
       item.location = newLoc;
+      item.locationConfirmed = false;
+      item.lotConfirmed = false;
       locationMap[item.code] = filterPreferredLocations(newLoc);
 
       pickList.forEach(p => {
         if (p.code === item.code) {
           p.location = newLoc;
+          p.locationConfirmed = false;
+          p.lotConfirmed = false;
         }
       });
 
@@ -2386,6 +2427,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function compareValues(a, b, field, order) {
       let valA = a[field];
       let valB = b[field];
+      if (field === 'original' || field === 'originalSortIndex') {
+        valA = Number.isFinite(a.originalSortIndex) ? a.originalSortIndex : a.line;
+        valB = Number.isFinite(b.originalSortIndex) ? b.originalSortIndex : b.line;
+      }
 
       if (field === 'status') {
         valA = a.itemPicked ? 'PICKED' : 'PENDING';
@@ -2845,10 +2890,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
             if (cell && typeof cell.v === 'number') {
               const format = String(cell.z || '');
-              const integerFormat = format.split('.')[0];
-              const zeroMatch = integerFormat.match(/0+/);
-              if (zeroMatch && /^[0]+$/.test(integerFormat.replace(/[^0]/g, ''))) {
-                const width = integerFormat.replace(/[^0]/g, '').length;
+              const integerFormat = format.split(';')[0].split('.')[0].replace(/"[^"]*"|\./g, '');
+              if (/^0+$/.test(integerFormat)) {
+                const width = integerFormat.length;
                 return String(Math.trunc(cell.v)).padStart(width, '0');
               }
               return String(cell.w !== undefined ? cell.w : cell.v);
@@ -2869,6 +2913,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             reportId: activeImportReportId,
             raw: row,
             line: lineIdx !== -1 ? (parseInt(row[lineIdx]) || (i - headerIdx)) : (i - headerIdx),
+            originalSortIndex: i - headerIdx,
             code: itemCode,
             name: descIdx !== -1 ? (row[descIdx] || 'N/A') : 'N/A',
             parentLot: parentLotIdx !== -1 && row[parentLotIdx] != null ? String(row[parentLotIdx]).trim() : '',
@@ -2880,6 +2925,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             uom: uomIdx !== -1 ? (row[uomIdx] || '') : '',
             requestedQty: qtyIdx !== -1 ? (parseInt(row[qtyIdx]) || 0) : 0,
             finalPickedQty: qtyIdx !== -1 ? (parseInt(row[qtyIdx]) || 0) : 0,
+            locationConfirmed: false,
             lotConfirmed: false,
             itemPicked: false,
             comment: ""
@@ -2965,18 +3011,55 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       renderSummaryTable();
     }
 
+    function speakCurrentLocation() {
+      const item = pickList[currentIndex];
+      if (!item || !('speechSynthesis' in window)) return;
+      stopLotSpeech(false);
+      window.speechSynthesis.cancel();
+      const text = String(item.location || 'Location not set').trim();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function confirmCurrentLocation() {
+      const item = pickList[currentIndex];
+      if (!item) return;
+      item.locationConfirmed = true;
+      item.lotConfirmed = false;
+      saveSessionState();
+      updateLotUIState();
+      speakLotSerial(item.lot);
+    }
+
     function toggleLotCheck() {
       const item = pickList[currentIndex];
+      if (!item.locationConfirmed) {
+        alert('Confirm the shelf location first.');
+        return;
+      }
       item.lotConfirmed = !item.lotConfirmed;
       saveSessionState();
       updateLotUIState();
+      if (item.lotConfirmed) speakLotSerial(item.lot);
       renderSummaryTable();
     }
 
     function updateLotUIState() {
       const item = pickList[currentIndex];
       const btn = document.getElementById('lotConfirmBtn');
+      const locationDetails = document.getElementById('locationStageDetails');
+      const lotDetails = document.getElementById('lotStageDetails');
+      const packageDetails = document.getElementById('packageDetails');
+      const locationBtn = document.getElementById('locationConfirmBtn');
       const inputs = ['packSize', 'cartonSizeInPacks', 'catchSizeInPacks', 'stripSize', 'itemComment', 'qtyCartons', 'qtyCatches', 'qtyPacks', 'qtyLooseUnits'];
+      item.locationConfirmed = item.locationConfirmed ?? !!item.lotConfirmed;
+      locationDetails.open = !item.locationConfirmed;
+      lotDetails.classList.toggle('hidden', !item.locationConfirmed);
+      lotDetails.open = item.locationConfirmed && !item.lotConfirmed;
+      packageDetails.open = !!item.lotConfirmed;
+      locationBtn.textContent = item.locationConfirmed ? '✅ Location confirmed' : '✓ Location confirmed';
+      locationBtn.disabled = !!item.locationConfirmed;
 
       if (item.lotConfirmed) {
         stopLotSpeech();
@@ -3033,6 +3116,34 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         btn.innerText = "💾 Save Packaging Data";
         btn.style.background = "#6366f1";
       }, 1500);
+    }
+
+    function addAnotherItemCopy() {
+      const source = pickList[currentIndex];
+      if (!source) return;
+      const nextAfter = pickList
+        .filter(item => item.reportId === source.reportId && Number(item.originalSortIndex) > Number(source.originalSortIndex))
+        .reduce((min, item) => Math.min(min, Number(item.originalSortIndex)), Number.POSITIVE_INFINITY);
+      const originalSortIndex = Number.isFinite(nextAfter)
+        ? (Number(source.originalSortIndex) + nextAfter) / 2
+        : Number(source.originalSortIndex || source.line || currentIndex + 1) + 0.5;
+      const copy = {
+        ...source,
+        raw: Array.isArray(source.raw) ? source.raw.slice() : source.raw,
+        originalSortIndex,
+        locationConfirmed: false,
+        lotConfirmed: false,
+        itemPicked: false,
+        comment: '',
+        finalPickedQty: source.requestedQty,
+        copyOfLine: source.copyOfLine || source.line
+      };
+      pickList.splice(currentIndex + 1, 0, copy);
+      saveSessionState();
+      renderCurrentItem();
+      renderSummaryTable();
+      const status = document.getElementById('addItemCopyStatus');
+        status.textContent = 'Added another copy of item ' + source.code + ' after line ' + source.line + '.';
     }
 
     function toggleQtyEdit() {
@@ -3692,8 +3803,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateLotUIState();
       updateStatusBadge();
       calculateLogicalBreakdown(item.finalPickedQty);
-      if (item.lotConfirmed) stopLotSpeech();
-      else speakLotSerial(item.lot);
+      if (!item.locationConfirmed) speakCurrentLocation();
+      else if (!item.lotConfirmed) speakLotSerial(item.lot);
+      else stopLotSpeech();
 
       document.getElementById('pickerPreviousItemBtn').disabled = currentIndex === 0;
       document.getElementById('pickerNextItemBtn').disabled = currentIndex >= pickList.length - 1;
@@ -3776,6 +3888,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       // DR-before-SH pick-path rules; line sorting restores report line order.
       if (sortMode === 'location') {
         sortPickList('location', 'asc', 'line', 'asc');
+      } else if (sortMode === 'original') {
+        sortPickList('originalSortIndex', 'asc', 'none', 'asc');
       } else {
         sortPickList('line', 'asc', 'none', 'asc');
       }
@@ -4579,6 +4693,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     $('newReportBtn').onclick = newReport;
     $('speakBtn').onclick = speakCurrent;
     $('matchAllBtn').onclick = matchAllDetails;
+    $('readLocationBtn').onclick = () => speakDoubleCheckLocation();
+    $('confirmLocationBtn').onclick = confirmDoubleCheckLocation;
+    $('confirmLotStepBtn').onclick = confirmDoubleCheckLot;
     $('lineComment').addEventListener('input', () => { if(session){session.rows[current].comment=$('lineComment').value;saveSession();} });
     $('auditNotes').addEventListener('input', saveSession);
     $('checkerIdentityMethod').addEventListener('change', updateCheckerIdentityMethod);
@@ -4633,7 +4750,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const code=String(raw[codeCol]).trim();
             const pending=status==='PENDING';
             const hasRevisedQuantity=revisedCol>=0&&Boolean(revised);
-            rows.push({sheetIndex,sheetName,pickSlipDate,code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot:lotCol>=0?String(raw[lotCol]??'').trim():'',expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,quantityColumn:(hasRevisedQuantity?revisedCol:reqCol)+1,remarksColumn:remarksCol>=0?remarksCol+1:0,matched:false,comment:''});
+            const lotCell = lotCol >= 0 ? sheet[XLSX.utils.encode_cell({r:i,c:lotCol})] : null;
+            const lot = formatDoubleCheckLot(lotCell, lotCol >= 0 ? raw[lotCol] : '');
+            const packageParts = [['Pack',findHeader(headers,['packsize','unitsperpack'])],['Carton',findHeader(headers,['cartonsize','packspercarton'])],['Catch',findHeader(headers,['catchsize','packspercatch'])],['Strip',findHeader(headers,['stripsize','unitsperstrip'])]]
+              .filter(([,column]) => column >= 0 && String(raw[column] ?? '').trim())
+              .map(([label,column]) => label + ': ' + String(raw[column]).trim());
+            rows.push({sheetIndex,sheetName,pickSlipDate,code,name:nameCol>=0?String(raw[nameCol]??'').trim():'',location:locCol>=0?String(raw[locCol]??'').trim():'',lot,expiry:expCol>=0?String(raw[expCol]??'').trim():'',qty,packageInfo:packageParts.join(' · ')||'Not provided in this report',locationConfirmed:false,lotConfirmed:false,reportStatus:status||'UNSPECIFIED',pending,remarks:remarksCol>=0?String(raw[remarksCol]??'').trim():'',sourceRow:i+1,quantityColumn:(hasRevisedQuantity?revisedCol:reqCol)+1,remarksColumn:remarksCol>=0?remarksCol+1:0,matched:false,comment:''});
           }
         });
         if(!rows.length) throw new Error('No item rows were found in the workbook sheets. Select the generated confirmation workbook.');
@@ -4645,10 +4767,40 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionPickSlipDate').textContent=session.pickSlipDate?'Pick slip date: '+session.pickSlipDate:'';$('sessionPickSlipDate').dataset.pickSlipDate=session.pickSlipDate||'';setPickSlipDateHeader(session.pickSlipDate);$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
     function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const comments=session.rows.filter(row=>String(row.comment||'').trim()).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=comments;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=comments?`${comments} line${comments===1?' has':'s have'} comments. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
     function isComplete(row){return row.matched===true&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
-    function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);$('lineComment').value=row.comment||'';const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('dcPrevBtn').disabled=current===0;$('dcNextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?'CHECKED':'NOT CHECKED';$('matchAllBtn').textContent=row.matched?'✓ All details matched':'✓ Match all details';updateSummary();}
-    function matchAllDetails(){if(!session)return;session.rows[current].matched=true;saveSession();showLine(current);}
+    function formatDoubleCheckLot(cell, rawValue) {
+      if (cell && typeof cell.v === 'number') {
+        const section = String(cell.z || '').split(';')[0].split('.')[0];
+        const zeroPattern = section.replace(/"[^"]*"|\./g, '').replace(/[^0]/g, '');
+        if (zeroPattern && /^[0]+$/.test(zeroPattern)) return String(Math.trunc(cell.v)).padStart(zeroPattern.length, '0');
+        if (cell.w !== undefined && cell.w !== null) return String(cell.w);
+        return String(cell.v);
+      }
+      if (cell && cell.v !== undefined && cell.v !== null) return String(cell.v);
+      return rawValue !== undefined && rawValue !== null ? String(rawValue) : '';
+    }
+    function getDoubleCheckPackageInfo(row) {
+      if (row.packageInfo && row.packageInfo !== 'Not provided in this report') return row.packageInfo;
+      const code = normalizePackagePart(row.code);
+      const name = normalizePackagePart(row.name);
+      const variants = [...new Map(Object.values(packagingDb || {})
+        .filter(config => normalizePackagePart(config.code) === code &&
+          (!name || !config.name || normalizePackagePart(config.name) === name))
+        .map(config => [packageConfigKey(config.code, config.name, config.parentLot), config])).values()];
+      if (!variants.length) return 'Not provided in report or loaded package master';
+      return variants.map(config => {
+        const identity = config.parentLot ? 'Parent lot ' + config.parentLot + ' · ' : '';
+        return identity + 'Pack ' + (config.packSize || '—') + ' · Carton ' + (config.cartonSize || '—') +
+          ' · Catch ' + (config.catchSize || '—') + ' · Strip ' + (config.stripSize || '—');
+      }).join(' / ');
+    }
+    function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);$('itemPackaging').textContent=text(getDoubleCheckPackageInfo(row));$('lineComment').value=row.comment||'';$('dcLocationDetails').open=!row.locationConfirmed;$('dcLotDetails').classList.toggle('hidden',!row.locationConfirmed);$('dcLotDetails').open=!!row.locationConfirmed&&!row.lotConfirmed;$('dcQtyDetails').open=!!row.lotConfirmed;$('confirmLocationBtn').disabled=!!row.locationConfirmed;$('confirmLocationBtn').textContent=row.locationConfirmed?'✅ Location confirmed':'✓ Location confirmed';$('confirmLotStepBtn').disabled=!row.locationConfirmed||!!row.lotConfirmed;$('confirmLotStepBtn').textContent=row.lotConfirmed?'✅ Lot and expiry confirmed':'✓ Confirm lot and expiry';if(!row.locationConfirmed)speakDoubleCheckLocation(row);else if(!row.lotConfirmed)speakDoubleCheckLot(row);const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('dcPrevBtn').disabled=current===0;$('dcNextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?'CHECKED':'NOT CHECKED';$('matchAllBtn').textContent=row.matched?'✓ All details matched':'✓ Match all details';updateSummary();}
+    function confirmDoubleCheckLocation(){if(!session)return;const row=session.rows[current];row.locationConfirmed=true;row.lotConfirmed=false;saveSession();showLine(current);}
+    function confirmDoubleCheckLot(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed)return;row.lotConfirmed=true;saveSession();showLine(current);speakDoubleCheckLot(row);}
+    function speakDoubleCheckLocation(row=session?.rows?.[current]){if(!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(String(row.location||'Location not set'));u.rate=.9;speechSynthesis.speak(u);}
+    function speakDoubleCheckLot(row=session?.rows?.[current]){if(!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const lot=String(row.lot||'not set');const u=new SpeechSynthesisUtterance('Lot number ' + [...lot].join(' '));u.rate=.9;speechSynthesis.speak(u);}
+    function matchAllDetails(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed||!row.lotConfirmed){alert('Confirm the location first, then confirm the lot and expiry before matching all details.');return;}row.matched=true;saveSession();showLine(current);}
     function goNextIncomplete(){saveSession();for(let offset=1;offset<session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}if(isComplete(session.rows[current]))$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});else $('lineStatus').textContent='This is the only unchecked line';}
-    function speakCurrent(){if(!session)return;if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const row=session.rows[current];const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location ${row.location||'not set'}. Lot number ${row.lot||'not set'}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.9;speechSynthesis.speak(utterance);}
+    function speakCurrent(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed){speakDoubleCheckLocation(row);return;}if(!row.lotConfirmed){speakDoubleCheckLot(row);return;}if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location ${row.location||'not set'}. Lot number ${row.lot||'not set'}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.9;speechSynthesis.speak(utterance);}
     function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);localStorage.removeItem(SOURCE_REPORT_KEY);sourceReportBase64='';session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
     function xmlEscape(value){return String(value??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');}
     function xmlUnescape(value){return String(value??'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');}
