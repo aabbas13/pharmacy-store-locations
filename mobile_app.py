@@ -1194,6 +1194,42 @@ def assign_item_to_location(item: dict, location: str) -> str:
     return "assigned"
 
 
+def remove_location_from_item(item: dict, location: str) -> bool:
+    """Remove one location from every sheet row merged into this item result."""
+    target = fix_location_format(str(location).strip().upper())
+    row_indices = item.get("row_indices", [])
+    if not target or not row_indices:
+        return False
+
+    ranges = [f"E{row_index}" for row_index in row_indices]
+    cell_values = sheet.batch_get(ranges)
+    updates = []
+    for row_index, result in zip(row_indices, cell_values):
+        raw_value = result[0][0] if result and result[0] else ""
+        kept_locations = []
+        removed = False
+        for line in str(raw_value or "").splitlines():
+            for part in line.split(","):
+                candidate = part.strip().upper()
+                if not candidate:
+                    continue
+                if fix_location_format(candidate) == target:
+                    removed = True
+                elif candidate not in kept_locations:
+                    kept_locations.append(candidate)
+        if removed:
+            updates.append({
+                "range": f"E{row_index}",
+                "values": [["\n".join(kept_locations)]],
+            })
+
+    if not updates:
+        return False
+    sheet.batch_update(updates, value_input_option="RAW")
+    st.cache_data.clear()
+    return True
+
+
 if not items:
     st.warning("No item records found in Google Sheet.")
     st.stop()
@@ -1368,11 +1404,10 @@ if app_mode == "🔍 Item Search":
             c_loc, c_del = st.columns([4, 1])
             c_loc.info(f"`{loc_val}`")
             if c_del.button("❌", key=f"del_{st.session_state.current_index}_{loc_idx}"):
-                updated_locs = [l for l in current_locations if l != loc_val]
-                cell_text = "\n".join(updated_locs)
-                sheet.update_cell(current_item["row_indices"][0], 5, cell_text)
-                st.toast(f"Removed {loc_val}!", icon="🗑️")
-                st.cache_data.clear()
+                if remove_location_from_item(current_item, loc_val):
+                    st.toast(f"Removed {loc_val}!", icon="🗑️")
+                else:
+                    st.warning(f"Could not find {loc_val} in the sheet to remove.")
                 st.rerun()
     else:
         st.info("No locations assigned to this item yet.")
@@ -1775,8 +1810,8 @@ else:
                 cb_info, cb_del = st.columns([4, 1])
                 cb_info.write(f"**{idx}.** {b_item['description']} (`{b_item['item_code']}`)")
                 if cb_del.button("❌", key=f"bin_unassign_{b_item['item_code']}_{idx}"):
-                    updated_locs = [l for l in b_item["locations"] if l != target_bin_location]
-                    sheet.update_cell(b_item["row_indices"][0], 5, "\n".join(updated_locs))
-                    st.toast(f"Unassigned {b_item['item_code']}", icon="🗑️")
-                    st.cache_data.clear()
+                    if remove_location_from_item(b_item, target_bin_location):
+                        st.toast(f"Unassigned {b_item['item_code']}", icon="🗑️")
+                    else:
+                        st.warning(f"Could not find {target_bin_location} in the sheet to remove.")
                     st.rerun()
