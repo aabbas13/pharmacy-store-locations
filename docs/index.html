@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#172554">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HMC Picker">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/hmc-picker-192.png">
   <title>HMC Offline Picking Helper & Pick Slip Processor - IR Footer OFFLINE FIX</title>
   <!-- ExcelJS CDN for style-enabled XLSX exports -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
@@ -369,6 +375,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     <button type="button" id="doubleCheckTabButton" class="app-tab" onclick="switchAppView('doublecheck')">✓ Double Check</button>
     <button type="button" id="itemSearchTabButton" class="app-tab" onclick="switchAppView('search')">🔎 Item Search</button>
   </nav>
+
+  <section class="card" style="max-width:980px;margin:10px auto;padding:10px 14px;">
+    <details id="installAppDetails">
+      <summary style="cursor:pointer;font-weight:750;color:#172554;">📲 Install HMC Picker on this device</summary>
+      <p style="margin:8px 0;color:#475569;font-size:.82rem;line-height:1.45;">Install it from your browser to add an app icon and open it in its own window. On Android, use <strong>Install app</strong> when available. On iPhone or iPad, open this page in Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
+      <button type="button" id="installPwaBtn" class="start-btn" style="display:none;width:100%;margin:4px 0 8px;">Install app</button>
+      <small id="installPwaStatus" role="status" aria-live="polite" style="color:#64748b;">Open this page online once before using the installed app. Cached picking sessions are stored on this device; sign-in and shared-sheet refresh need an internet connection.</small>
+    </details>
+  </section>
 
   <div id="pickerAppView">
 
@@ -5075,6 +5090,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       } catch (error) {
         showError("Could not initialize sign-in. Contact the app administrator.");
+      }
+    })();
+  </script>
+  <script>
+    (function registerInstallableApp() {
+      const installButton = document.getElementById('installPwaBtn');
+      const installStatus = document.getElementById('installPwaStatus');
+      let pendingInstall = null;
+      const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (standalone && installStatus) installStatus.textContent = 'HMC Picker is installed on this device.';
+      window.addEventListener('beforeinstallprompt', event => {
+        event.preventDefault();
+        pendingInstall = event;
+        installButton.style.display = 'block';
+      });
+      installButton?.addEventListener('click', async () => {
+        if (!pendingInstall) return;
+        pendingInstall.prompt();
+        const choice = await pendingInstall.userChoice;
+        installStatus.textContent = choice.outcome === 'accepted' ? 'App installation started.' : 'Installation was dismissed. You can install it later from your browser menu.';
+        pendingInstall = null;
+        installButton.style.display = 'none';
+      });
+      window.addEventListener('appinstalled', () => {
+        installButton.style.display = 'none';
+        installStatus.textContent = 'HMC Picker is installed on this device.';
+      });
+      if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+          .then(() => { if (!standalone) installStatus.dataset.offlineReady = 'true'; })
+          .catch(error => { console.warn('App shell caching is unavailable:', error); }));
       }
     })();
   </script>

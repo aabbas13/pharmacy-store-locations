@@ -34,7 +34,7 @@ if /i not "%CONFIRM%"=="YES" (
 )
 
 rem Stage the public app files and the launcher. Spreadsheet and other untracked files are excluded.
-git add -- mobile_app.py hmc_offline_picking_helper283420Accurate20Fit.html docs/index.html requirements.txt .gitignore deploy.bat run_store_apps.bat
+git add -- mobile_app.py hmc_offline_picking_helper283420Accurate20Fit.html docs/index.html docs/manifest.webmanifest docs/service-worker.js docs/icons/hmc-picker-192.png docs/icons/hmc-picker-512.png requirements.txt .gitignore deploy.bat run_store_apps.bat
 if errorlevel 1 (
     echo ERROR: Could not stage the public app files.
     goto :failed
