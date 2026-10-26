@@ -479,6 +479,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   </div>
 
   <section id="pickerToolsCard" class="card hidden" aria-label="Picking list tools">
+    <button type="button" class="secondary" onclick="startNewSession()" style="width:100%;min-height:44px;margin-bottom:8px;font-weight:700;">＋ Start New Session</button>
     <details class="picker-secondary-details">
       <summary>➕ Add more pick slips</summary>
       <div style="padding:8px 0;">
@@ -1257,6 +1258,61 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       updateHeaderDisplay();
       renderCurrentItem();
       renderSummaryTable();
+    }
+
+    async function startNewSession() {
+      const hasActiveItems = Array.isArray(pickList) && pickList.length > 0;
+      const previousSessionId = sessionId;
+      if (hasActiveItems) {
+        const prompt = previousSessionId
+          ? `Save the current picking session (D2: ${previousSessionId}) and start another? You can resume it later from the saved sessions list.`
+          : 'This picking session has no D2 identifier, so it cannot be saved for later. Start a new session and leave this progress behind?';
+        if (!window.confirm(prompt)) return;
+        if (previousSessionId) {
+          try {
+            if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+            sessionSaveTimer = null;
+            await persistCurrentSession();
+          } catch (error) {
+            alert(`Could not save the current session. The new session was not started. ${error.message || error}`);
+            return;
+          }
+        }
+      }
+
+      if (voiceModeActive) toggleVoiceMode();
+      if (sessionSaveTimer) clearTimeout(sessionSaveTimer);
+      sessionSaveTimer = null;
+      resetPickerImportContext();
+      [
+        'hmc_pickList', 'hmc_currentIndex', 'hmc_pickedPlacementLocation', 'hmc_confirmedPickCount',
+        'hmc_placementUpdateRequired', 'hmc_moveOrderNum', 'hmc_customerName', 'hmc_pickSlipDate',
+        'hmc_rawHeaderMatrix', 'hmc_rawFooterRows', 'hmc_originalColWidths', 'hmc_originalMerges',
+        'hmc_sessionId', 'hmc_pickedByIdentity', 'hmc_reportMetadataList'
+      ].forEach(key => sessionStorage.removeItem(key));
+
+      document.getElementById('pickSlipFile').value = '';
+      document.getElementById('addPickSlipsInput').value = '';
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('uploadCard').classList.remove('hidden');
+      document.getElementById('viewToggleCard').classList.add('hidden');
+      document.getElementById('pickerToolsCard').classList.add('hidden');
+      document.getElementById('voiceControlCard').classList.add('hidden');
+      document.getElementById('pickerCard').classList.add('hidden');
+      document.getElementById('tableSummaryCard').classList.add('hidden');
+      document.getElementById('navGroup').classList.add('hidden');
+      document.getElementById('pickConfirmModal').style.display = 'none';
+      document.getElementById('headerTitle').innerText = '🏥 HMC Picking Helper';
+      document.getElementById('headerSubtitle').innerText = 'Move Order & Customer Header Details';
+      setPickSlipDateHeader('');
+      document.getElementById('sessionPersistenceStatus').textContent = hasActiveItems && previousSessionId
+        ? `Previous session saved · D2 ${previousSessionId}. Ready to load a new pick slip.`
+        : 'Ready to load a new pick slip. Saved sessions remain available below.';
+      document.getElementById('sessionPersistenceStatus').style.color = '#167344';
+      switchAppView('picker');
+      switchView('single');
+      await renderSavedSessionsList();
+      document.getElementById('uploadCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     async function restorePersistentSession(saved) {
