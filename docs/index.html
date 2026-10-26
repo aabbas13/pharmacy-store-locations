@@ -559,6 +559,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </details>
 
+    <!-- Editable Picked Quantity -->
+    <div class="qty-edit-box">
+      <div style="flex:1;">
+        <label>Requested Qty</label>
+        <div id="reqQtyLabel" style="font-weight:bold; font-size:1.1rem; color: var(--primary);">0</div>
+      </div>
+      <div style="flex:1;">
+        <label>Final Picked Qty</label>
+        <input type="number" id="pickedQtyInput" style="font-weight:bold; color:#15803d; text-align:center;" disabled>
+      </div>
+      <button class="secondary" onclick="toggleQtyEdit()" style="padding: 8px; font-size:0.8rem; flex:0.6;">✏️ Edit</button>
+    </div>
+
     <details id="packageDetails" class="picker-secondary-details">
       <summary>📦 Step 3 · Quantity and packaging details</summary>
       <div>
@@ -609,18 +622,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </details>
 
-    <!-- Editable Picked Quantity -->
-    <div class="qty-edit-box">
-      <div style="flex:1;">
-        <label>Requested Qty</label>
-        <div id="reqQtyLabel" style="font-weight:bold; font-size:1.1rem; color: var(--primary);">0</div>
-      </div>
-      <div style="flex:1;">
-        <label>Final Picked Qty</label>
-        <input type="number" id="pickedQtyInput" style="font-weight:bold; color:#15803d; text-align:center;" disabled>
-      </div>
-      <button class="secondary" onclick="toggleQtyEdit()" style="padding: 8px; font-size:0.8rem; flex:0.6;">✏️ Edit</button>
-    </div>
 
     <div class="picker-main-actions">
       <button id="confirmItemBtn" class="confirm-item-btn" onclick="confirmFullPicked()" disabled>📦 Confirm Picked</button>
@@ -3248,8 +3249,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const shelfRow = parts[2].match(/^([A-Z])([A-Z])$/);
       const column = /^\d+$/.test(parts[3]) ? String(Number(parts[3])) : spellIdentifierForSpeech(parts[3]);
       const details = shelfRow
-        ? `${locationType} ${shelfRow[1]}, Column ${column}, Row ${shelfRow[2]}`
-        : `${locationType}, Column ${column}, ${spellIdentifierForSpeech(parts[2])}`;
+        ? `${locationType}. ${shelfRow[1]}. Column. ${column}. Row. ${shelfRow[2]}`
+        : `${locationType}. Column. ${column}. ${spellIdentifierForSpeech(parts[2])}`;
       const extra = parts.slice(4).map(spellIdentifierForSpeech).filter(Boolean);
       return [areaText, details, ...extra].filter(Boolean).join('. ');
     }
