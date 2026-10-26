@@ -75,6 +75,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     .header-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; max-width: 62%; }
     .header-btn { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: bold; cursor: pointer; text-decoration: none; }
     .header-btn.voice-active { background: #166534; border-color: #86efac; }
+    .header-btn.speech-output-enabled { background: #166534; border-color: #86efac; }
     .voice-status { display: block; margin: 4px 0 7px; padding: 5px 8px; border-radius: 7px; background: #f1f5f9; color: #475569; font-size: 0.72rem; }
     .voice-commands-help { margin: 4px 0 8px; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 8px; background: #eff6ff; }
     .voice-commands-help > summary { color: #1d4ed8; cursor: pointer; font-size: 0.76rem; font-weight: 700; }
@@ -365,6 +366,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div>
     <div class="header-actions">
       <button class="header-btn" id="voiceModeBtn" type="button" onclick="toggleVoiceMode()">🎙 Start Voice</button>
+      <button class="header-btn" id="speechOutputBtn" type="button" onclick="toggleSpeechOutput()" aria-pressed="true" title="Toggle spoken readout">🔊 Read aloud</button>
       <button class="header-btn" onclick="openSortModal()">🔀 Sort</button>
       <button class="header-btn" onclick="openCalculator()">🧮 Calc</button>
     </div>
@@ -415,7 +417,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     <div class="file-group" style="border:1px solid #cbd5e1; padding:12px; border-radius:10px; margin-top:12px;">
       <label style="font-weight:bold;">Resume a saved pick session</label>
-      <small style="display:block; margin:4px 0 8px; color:#64748b;">Sessions are saved on this device using the identifier in cell D2 of the original pick slip.</small>
+      <small style="display:block; margin:4px 0 8px; color:#64748b;">Sessions are saved on this device using the identifier in cell D2 and kept for up to 7 days after the last save.</small>
       <button type="button" class="header-btn" onclick="renderSavedSessionsList()" style="width:auto; margin-bottom:8px;">↻ Refresh saved sessions</button>
       <div id="savedSessionsList" role="list" aria-live="polite">Loading saved sessions…</div>
     </div>
@@ -1020,7 +1022,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function speakItemSuffix(digits) {
-      if (!('speechSynthesis' in window)) return;
+      if (!isSpeechOutputEnabled() || !('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(`Item number ending ${digits.split('').join(' ')}`);
       utterance.rate = 0.85;
@@ -1127,6 +1129,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const voicePhrases = Object.fromEntries(VOICE_PHRASE_DEFS.map(def => [def.key, def.defaults[0]]));
     const HMC_SESSION_DB = 'hmc-picking-sessions-v1';
     const HMC_SESSION_STORE = 'sessions';
+    const HMC_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+    let speechOutputEnabled = (() => {
+      try { return localStorage.getItem('hmc_speech_output_enabled') !== 'false'; }
+      catch (_) { return true; }
+    })();
+
+    function isSpeechOutputEnabled() { return speechOutputEnabled; }
+
+    function updateSpeechOutputButton() {
+      const button = document.getElementById('speechOutputBtn');
+      if (!button) return;
+      button.textContent = speechOutputEnabled ? '🔊 Read aloud' : '🔇 Silent';
+      button.setAttribute('aria-pressed', String(speechOutputEnabled));
+      button.classList.toggle('speech-output-enabled', speechOutputEnabled);
+      button.title = speechOutputEnabled ? 'Spoken readout is on; select to switch to silent mode' : 'Silent mode is on; select to enable spoken readout';
+    }
+
+    function toggleSpeechOutput() {
+      speechOutputEnabled = !speechOutputEnabled;
+      try { localStorage.setItem('hmc_speech_output_enabled', String(speechOutputEnabled)); } catch (_) {}
+      if (!speechOutputEnabled) {
+        if (typeof stopLotSpeech === 'function') stopLotSpeech(false);
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        voiceSpeaking = false;
+        if (voiceModeActive) scheduleVoiceRestart(150);
+      }
+      updateSpeechOutputButton();
+    }
+
+    updateSpeechOutputButton();
 
     // Header Details, Column Widths, Merges, & Footer Signature Data Storage
     // Versioned session key prevents older app versions from restoring stale
@@ -1167,6 +1199,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function normalizedSessionKey(value) { return String(value ?? '').trim().toUpperCase(); }
     function normalizedLocationCode(value) { return String(value ?? '').trim().toUpperCase().replace(/\.0+$/, ''); }
+    function isPersistentSessionExpired(saved) {
+      const savedAt = new Date(saved?.savedAt || '').getTime();
+      return Number.isFinite(savedAt) && savedAt > 0 && Date.now() - savedAt > HMC_SESSION_RETENTION_MS;
+    }
 
     function snapshotCurrentSession() {
       return {
@@ -1219,23 +1255,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     async function loadPersistentSession(identifier) {
       const db = await openHmcSessionDb();
-      return new Promise((resolve, reject) => {
+      const saved = await new Promise((resolve, reject) => {
         const request = db.transaction(HMC_SESSION_STORE).objectStore(HMC_SESSION_STORE).get(normalizedSessionKey(identifier));
         request.onsuccess = () => { db.close(); resolve(request.result || null); };
         request.onerror = () => { db.close(); reject(request.error || new Error('Could not read saved picking progress.')); };
       });
+      if (saved && isPersistentSessionExpired(saved)) {
+        await deletePersistentSession(identifier);
+        return null;
+      }
+      return saved;
     }
 
     async function listPersistentSessions() {
       const db = await openHmcSessionDb();
-      return new Promise((resolve, reject) => {
+      const sessions = await new Promise((resolve, reject) => {
         const request = db.transaction(HMC_SESSION_STORE).objectStore(HMC_SESSION_STORE).getAll();
-        request.onsuccess = () => {
-          db.close();
-          resolve((request.result || []).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || ''))));
-        };
+        request.onsuccess = () => { db.close(); resolve(request.result || []); };
         request.onerror = () => { db.close(); reject(request.error || new Error('Could not list saved sessions.')); };
       });
+      const currentSessions = [];
+      for (const saved of sessions) {
+        if (isPersistentSessionExpired(saved)) await deletePersistentSession(saved.sessionId);
+        else currentSessions.push(saved);
+      }
+      return currentSessions.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')));
     }
 
     async function deletePersistentSession(identifier) {
@@ -3192,12 +3236,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }).filter(Boolean).join(', ');
     }
 
+    function describeLocationForSpeech(value) {
+      const raw = String(value ?? '').trim().toUpperCase();
+      if (!raw) return 'location not set';
+      const parts = raw.split('.').map(part => part.trim());
+      if (parts.length < 4) return spellIdentifierForSpeech(raw);
+
+      const area = parts[0].match(/^A(\d+)$/);
+      const areaText = area ? `Area ${Number(area[1])}` : spellIdentifierForSpeech(parts[0]);
+      const locationType = { CR: 'Cold Room', SH: 'Shelf', DR: 'Drawer' }[parts[1]] || spellIdentifierForSpeech(parts[1]);
+      const shelfRow = parts[2].match(/^([A-Z])([A-Z])$/);
+      const column = /^\d+$/.test(parts[3]) ? String(Number(parts[3])) : spellIdentifierForSpeech(parts[3]);
+      const details = shelfRow
+        ? `${locationType} ${shelfRow[1]}, Column ${column}, Row ${shelfRow[2]}`
+        : `${locationType}, Column ${column}, ${spellIdentifierForSpeech(parts[2])}`;
+      const extra = parts.slice(4).map(spellIdentifierForSpeech).filter(Boolean);
+      return [areaText, details, ...extra].filter(Boolean).join('. ');
+    }
+
     function speakCurrentLocation() {
       const item = pickList[currentIndex];
-      if (!item || !('speechSynthesis' in window)) return;
+      if (!isSpeechOutputEnabled() || !item || !('speechSynthesis' in window)) return;
       stopLotSpeech(false);
       window.speechSynthesis.cancel();
-      const text = `Location. ${spellIdentifierForSpeech(item.location || 'Location not set')}`;
+      const text = `Location. ${describeLocationForSpeech(item.location || '')}`;
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.66;
       window.speechSynthesis.speak(utterance);
@@ -3375,7 +3437,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     function speakLotSerial(value) {
       stopLotSpeech(false);
-      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
+      if (!isSpeechOutputEnabled() || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') return;
       const lot = String(value ?? '').trim();
       if (!lot || lot === 'N/A' || lot === '--') return;
       const spelledLot = spellIdentifierForSpeech(lot);
@@ -3492,7 +3554,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     function speakVoiceResponse(message, afterSpeaking) {
-      if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      if (!isSpeechOutputEnabled() || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
         if (afterSpeaking) afterSpeaking();
         if (voiceModeActive) scheduleVoiceRestart();
         return;
@@ -3655,7 +3717,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       if (voicePhraseMatches('readItem', phrase)) {
         const item = pickList[currentIndex];
-        speakVoiceResponse(`Item ${item.code}. ${item.name}. Location. ${spellIdentifierForSpeech(item.location || 'not set')}. Lot number. ${spellIdentifierForSpeech(item.lot || 'not set')}. Expiry ${item.expiry}.`);
+        speakVoiceResponse(`Item ${item.code}. ${item.name}. Location. ${describeLocationForSpeech(item.location || '')}. Lot number. ${spellIdentifierForSpeech(item.lot || 'not set')}. Expiry ${item.expiry}.`);
         return;
       }
 
@@ -4825,10 +4887,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     'use strict';
     const STORE_KEY = 'hmc_double_check_session_v2';
     const SOURCE_REPORT_KEY = 'hmc_double_check_source_report_v1';
+    const SOURCE_REPORT_SAVED_AT_KEY = 'hmc_double_check_source_report_saved_at_v1';
     const LEGACY_FIELD_KEYS = ['code','location','lot','expiry','qty','status'];
     let session = null, current = 0, drawing = null;
     let sourceReportBase64 = '';
-    try { sourceReportBase64 = localStorage.getItem(SOURCE_REPORT_KEY) || ''; } catch (e) {}
+    try {
+      sourceReportBase64 = localStorage.getItem(SOURCE_REPORT_KEY) || '';
+      const sourceSavedAt = new Date(localStorage.getItem(SOURCE_REPORT_SAVED_AT_KEY) || '').getTime();
+      if (sourceReportBase64 && Number.isFinite(sourceSavedAt) && sourceSavedAt > 0 && Date.now() - sourceSavedAt > 7 * 24 * 60 * 60 * 1000) {
+        localStorage.removeItem(SOURCE_REPORT_KEY);
+        localStorage.removeItem(SOURCE_REPORT_SAVED_AT_KEY);
+        sourceReportBase64 = '';
+      } else if (sourceReportBase64 && (!Number.isFinite(sourceSavedAt) || sourceSavedAt <= 0)) {
+        localStorage.setItem(SOURCE_REPORT_SAVED_AT_KEY, new Date().toISOString());
+      }
+    } catch (e) {}
     const $ = id => document.getElementById(id);
     const text = value => value == null || String(value).trim() === '' ? '—' : String(value).trim();
     const cleanQty = value => String(value ?? '').replace(/[✓✔]/g,'').replace(/,/g,'').trim();
@@ -4871,7 +4944,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try{
         const bytes=await file.arrayBuffer();
         sourceReportBase64=arrayBufferToBase64(bytes);
-        try { localStorage.setItem(SOURCE_REPORT_KEY,sourceReportBase64); } catch (storageError) { try { localStorage.removeItem(SOURCE_REPORT_KEY); } catch (cleanupError) {} console.warn('The source workbook could not be saved for a later export; keep this tab open or re-upload the picking report before exporting.',storageError); }
+        try { localStorage.setItem(SOURCE_REPORT_KEY,sourceReportBase64); localStorage.setItem(SOURCE_REPORT_SAVED_AT_KEY,new Date().toISOString()); } catch (storageError) { try { localStorage.removeItem(SOURCE_REPORT_KEY); localStorage.removeItem(SOURCE_REPORT_SAVED_AT_KEY); } catch (cleanupError) {} console.warn('The source workbook could not be saved for a later export; keep this tab open or re-upload the picking report before exporting.',storageError); }
         const book=XLSX.read(bytes,{type:'array',cellDates:true});
         const rows=[];
         const pickSlipDates=[];
@@ -4915,8 +4988,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         session={fileName:file.name,importedAt:new Date().toISOString(),pickSlipDate:pickSlipDates[0]||'',sheetNames:book.SheetNames,rows,checker:'',checkerIdentity:null,notes:''};
         current=0; $('checkerIdentityMethod').value='name';$('checkerIdentityValue').value='';clearCheckerSignature();updateCheckerIdentityMethod();$('checkerIdentitySetup').style.display='flex';$('checkerIdentityValue').focus();
       }catch(error){ $('importStatus').textContent=error.message||String(error); }
-    }    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current}));}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
-    function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};session.rows.forEach(row=>{if(typeof row.matched!=='boolean'){const checks=row.checks||{};row.matched=LEGACY_FIELD_KEYS.every(key=>checks[key]?.state==='match');const oldNotes=LEGACY_FIELD_KEYS.map(key=>checks[key]?.state==='issue'&&checks[key]?.note?checks[key].note:'').filter(Boolean);if(!row.comment&&oldNotes.length)row.comment=oldNotes.join(' | ');}if(typeof row.comment!=='string')row.comment='';});current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
+    }    function saveSession(){ if(!session)return; session.notes=$('auditNotes').value; if(session.rows[current])session.rows[current].comment=$('lineComment').value; const savedAt=new Date().toISOString(); try{localStorage.setItem(STORE_KEY,JSON.stringify({session,current,savedAt}));if(sourceReportBase64)localStorage.setItem(SOURCE_REPORT_SAVED_AT_KEY,savedAt);}catch(e){console.warn('Could not save double-check progress',e);} updateSummary(); }
+    function restoreSession(){try{const saved=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(saved?.session?.rows?.length){const savedAt=new Date(saved.savedAt||'').getTime();if(Number.isFinite(savedAt)&&savedAt>0&&Date.now()-savedAt>7*24*60*60*1000){localStorage.removeItem(STORE_KEY);localStorage.removeItem(SOURCE_REPORT_KEY);localStorage.removeItem(SOURCE_REPORT_SAVED_AT_KEY);$('importStatus').textContent='The saved double-check session expired after 7 days. Upload the report again to start a new check.';return;}if(!Number.isFinite(savedAt)||savedAt<=0){saved.savedAt=new Date().toISOString();try{localStorage.setItem(STORE_KEY,JSON.stringify(saved));if(sourceReportBase64)localStorage.setItem(SOURCE_REPORT_SAVED_AT_KEY,saved.savedAt);}catch(_){}}session=saved.session;if(!session.checkerIdentity&&session.checker)session.checkerIdentity={method:'name',display:session.checker,signatureData:''};session.rows.forEach(row=>{if(typeof row.matched!=='boolean'){const checks=row.checks||{};row.matched=LEGACY_FIELD_KEYS.every(key=>checks[key]?.state==='match');const oldNotes=LEGACY_FIELD_KEYS.map(key=>checks[key]?.state==='issue'&&checks[key]?.note?checks[key].note:'').filter(Boolean);if(!row.comment&&oldNotes.length)row.comment=oldNotes.join(' | ');}if(typeof row.comment!=='string')row.comment='';});current=Math.min(saved.current||0,session.rows.length-1);openSession();}else if(localStorage.getItem('hmc_double_check_session_v1')){$('importStatus').textContent='A previous double-check session is saved, but it predates pending-line support. Upload the report again to include every line.';}}catch(e){console.warn('Saved double-check session could not be restored',e);}}
     function openSession(){ $('checkerIdentitySetup').style.display='none';$('importPanel').classList.add('hidden');$('sessionPanel').classList.remove('hidden');$('checkPanel').classList.remove('hidden');$('sourceName').textContent=session.fileName;$('sessionPickSlipDate').textContent=session.pickSlipDate?'Pick slip date: '+session.pickSlipDate:'';$('sessionPickSlipDate').dataset.pickSlipDate=session.pickSlipDate||'';setPickSlipDateHeader(session.pickSlipDate);$('sessionMeta').textContent=`Imported ${new Date(session.importedAt).toLocaleString()} · saved on this device`;$('checkerDisplay').textContent=session.checkerIdentity?.display||session.checker||'Not set';$('auditNotes').value=session.notes||'';$('lineComment').value=session.rows[current]?.comment||'';updateSummary();showLine(current); }
     function updateSummary(){if(!session)return;const done=session.rows.filter(isComplete).length;const comments=session.rows.filter(row=>String(row.comment||'').trim()).length;const pendingCount=session.rows.filter(row=>row.pending).length;const pct=Math.round(done/session.rows.length*100);$('totalCount').textContent=session.rows.length;$('checkedCount').textContent=done;$('issueCount').textContent=comments;$('remainingCount').textContent=session.rows.length-done;$('progressText').textContent=`${done} of ${session.rows.length} complete`;$('percentText').textContent=`${pct}%`;$('progressBar').style.width=`${pct}%`;const pending=$('pendingBanner');if(pendingCount){pending.textContent=`${pendingCount} pending line${pendingCount===1?' is':'s are'} included in this check and will appear in the audit.`;pending.classList.remove('hidden');}else pending.classList.add('hidden');if(done===session.rows.length){$('finishPanel').classList.remove('hidden');$('finishMessage').textContent=comments?`${comments} line${comments===1?' has':'s have'} comments. Review them and include the audit workbook with the original report.`:'Every report line, including pending lines, has been checked.';}else $('finishPanel').classList.add('hidden');}
     function isComplete(row){return row.matched===true&&Boolean(String(session.checkerIdentity?.display||session.checker||'').trim());}
@@ -4949,12 +5022,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function showLine(index){if(!session)return;current=index;const row=session.rows[current];$('lineCounter').textContent=`Line ${current+1} of ${session.rows.length} · source row ${row.sourceRow}`;$('itemCode').textContent=text(row.code);$('itemName').textContent=text(row.name);$('itemLocation').textContent=text(row.location);$('itemLot').textContent=text(row.lot);$('itemExpiry').textContent=text(row.expiry);$('itemQty').textContent=text(row.qty);$('itemPackaging').textContent=text(getDoubleCheckPackageInfo(row));$('lineComment').value=row.comment||'';$('dcLocationDetails').open=!row.locationConfirmed;$('dcLotDetails').classList.toggle('hidden',!row.locationConfirmed);$('dcLotDetails').open=!!row.locationConfirmed&&!row.lotConfirmed;$('dcQtyDetails').open=!!row.lotConfirmed;$('confirmLocationBtn').disabled=!!row.locationConfirmed;$('confirmLocationBtn').textContent=row.locationConfirmed?'✅ Location confirmed':'✓ Location confirmed';$('confirmLotStepBtn').disabled=!row.locationConfirmed||!!row.lotConfirmed;$('confirmLotStepBtn').textContent=row.lotConfirmed?'✅ Lot and expiry confirmed':'✓ Confirm lot and expiry';if(!row.locationConfirmed)speakDoubleCheckLocation(row);else if(!row.lotConfirmed)speakDoubleCheckLot(row);const statusBadge=$('reportStatusBadge');statusBadge.textContent=`Report status: ${row.reportStatus}${row.pending?' · this line is still pending':''}`;statusBadge.classList.toggle('hidden',!row.pending);$('dcPrevBtn').disabled=current===0;$('dcNextBtn').disabled=current>=session.rows.length-1;$('lineStatus').textContent=isComplete(row)?'CHECKED':'NOT CHECKED';$('matchAllBtn').textContent=row.matched?'✓ All details matched':'✓ Match all details';updateSummary();}
     function confirmDoubleCheckLocation(){if(!session)return;const row=session.rows[current];row.locationConfirmed=true;row.lotConfirmed=false;saveSession();showLine(current);}
     function confirmDoubleCheckLot(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed)return;row.lotConfirmed=true;saveSession();showLine(current);speakDoubleCheckLot(row);}
-    function speakDoubleCheckLocation(row=session?.rows?.[current]){if(!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(`Location. ${spellIdentifierForSpeech(row.location||'not set')}`);u.rate=.66;speechSynthesis.speak(u);}
-    function speakDoubleCheckLot(row=session?.rows?.[current]){if(!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const lot=String(row.lot||'not set');const u=new SpeechSynthesisUtterance(`Lot number. ${spellIdentifierForSpeech(lot)}`);u.rate=.66;speechSynthesis.speak(u);}
+    function speakDoubleCheckLocation(row=session?.rows?.[current]){if(!isSpeechOutputEnabled()||!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(`Location. ${describeLocationForSpeech(row.location||'')}`);u.rate=.66;speechSynthesis.speak(u);}
+    function speakDoubleCheckLot(row=session?.rows?.[current]){if(!isSpeechOutputEnabled()||!row||!('speechSynthesis'in window))return;speechSynthesis.cancel();const lot=String(row.lot||'not set');const u=new SpeechSynthesisUtterance(`Lot number. ${spellIdentifierForSpeech(lot)}`);u.rate=.66;speechSynthesis.speak(u);}
     function matchAllDetails(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed||!row.lotConfirmed){alert('Confirm the location first, then confirm the lot and expiry before matching all details.');return;}row.matched=true;saveSession();showLine(current);}
     function goNextIncomplete(){saveSession();for(let offset=1;offset<session.rows.length;offset++){const idx=(current+offset)%session.rows.length;if(!isComplete(session.rows[idx])){showLine(idx);return;}}if(isComplete(session.rows[current]))$('finishPanel').scrollIntoView({behavior:'smooth',block:'center'});else $('lineStatus').textContent='This is the only unchecked line';}
-    function speakCurrent(){if(!session)return;const row=session.rows[current];if(!row.locationConfirmed){speakDoubleCheckLocation(row);return;}if(!row.lotConfirmed){speakDoubleCheckLot(row);return;}if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location. ${spellIdentifierForSpeech(row.location||'not set')}. Lot number. ${spellIdentifierForSpeech(row.lot||'not set')}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.68;speechSynthesis.speak(utterance);}
-    function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);localStorage.removeItem(SOURCE_REPORT_KEY);sourceReportBase64='';session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
+    function speakCurrent(){if(!isSpeechOutputEnabled()||!session)return;const row=session.rows[current];if(!row.locationConfirmed){speakDoubleCheckLocation(row);return;}if(!row.lotConfirmed){speakDoubleCheckLot(row);return;}if(!('speechSynthesis'in window)){return;}speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`Item ${row.code}. ${row.name}. Location. ${describeLocationForSpeech(row.location||'')}. Lot number. ${spellIdentifierForSpeech(row.lot||'not set')}. Expiry ${row.expiry||'not set'}. Quantity ${row.qty||'not set'}.`);utterance.rate=.68;speechSynthesis.speak(utterance);}
+    function newReport(){if(!confirm('Start a new double-check session? The current progress will be replaced on this device.'))return;localStorage.removeItem(STORE_KEY);localStorage.removeItem(SOURCE_REPORT_KEY);localStorage.removeItem(SOURCE_REPORT_SAVED_AT_KEY);sourceReportBase64='';session=null;current=0;$('checkerIdentitySetup').style.display='none';$('sessionPanel').classList.add('hidden');$('checkPanel').classList.add('hidden');$('finishPanel').classList.add('hidden');$('importPanel').classList.remove('hidden');$('reportFile').value='';$('importStatus').textContent='';}
     function xmlEscape(value){return String(value??'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');}
     function xmlUnescape(value){return String(value??'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');}
     function cellAddress(column,row){let letters='';while(column>0){const remainder=(column-1)%26;letters=String.fromCharCode(65+remainder)+letters;column=Math.floor((column-1)/26);}return `${letters}${row}`;}
