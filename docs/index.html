@@ -2876,7 +2876,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       reader.onload = async function(e) {
         try {
         const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellStyles: true });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: false, cellStyles: true, cellNF: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         pickSlipDate = getPickSlipDateFromSheet(sheet);
 
@@ -3047,13 +3047,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             }
 
             if (cell && typeof cell.v === 'number') {
+              const displayedText = String(cell.w ?? '').trim();
+              if (/^0+\d+$/.test(displayedText) && Number(displayedText) === cell.v) {
+                return displayedText;
+              }
               const format = String(cell.z || '');
-              const integerFormat = format.split(';')[0].split('.')[0].replace(/"[^"]*"|\./g, '');
-              if (/^0+$/.test(integerFormat)) {
-                const width = integerFormat.length;
+              const positiveFormat = format.split(';')[0].replace(/"[^"]*"|\\.|\[[^\]]*\]/g, '');
+              const integerFormat = positiveFormat.split('.')[0];
+              const zeroPlaceholders = integerFormat.match(/0+/g) || [];
+              const zeroWidth = zeroPlaceholders.length ? Math.max(...zeroPlaceholders.map(group => group.length)) : 0;
+              if (zeroWidth > String(Math.trunc(cell.v)).length) {
+                const width = zeroWidth;
                 return String(Math.trunc(cell.v)).padStart(width, '0');
               }
-              return String(cell.w !== undefined ? cell.w : cell.v);
+              return displayedText || String(cell.v);
             }
 
             if (cell && cell.w !== undefined && cell.w !== null) {
