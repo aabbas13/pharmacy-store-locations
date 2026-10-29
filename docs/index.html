@@ -3276,10 +3276,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const areaText = area ? `Area ${Number(area[1])}` : spellIdentifierForSpeech(parts[0]);
       const locationType = { CR: 'Cold Room', SH: 'Shelf', DR: 'Drawer' }[parts[1]] || spellIdentifierForSpeech(parts[1]);
       const shelfRow = parts[2].match(/^([A-Z])([A-Z])$/);
-      const column = /^\d+$/.test(parts[3]) ? String(Number(parts[3])) : spellIdentifierForSpeech(parts[3]);
+      const finalSegment = spellIdentifierForSpeech(parts[3]);
       const details = shelfRow
-        ? `${locationType}. ${shelfRow[1]}. Column. ${column}. Row. ${shelfRow[2]}`
-        : `${locationType}. Column. ${column}. ${spellIdentifierForSpeech(parts[2])}`;
+        ? `${locationType}. ${shelfRow[1]}. ${finalSegment}. ${shelfRow[2]}`
+        : `${locationType}. ${finalSegment}. ${spellIdentifierForSpeech(parts[2])}`;
       const extra = parts.slice(4).map(spellIdentifierForSpeech).filter(Boolean);
       return [areaText, details, ...extra].filter(Boolean).join('. ');
     }
