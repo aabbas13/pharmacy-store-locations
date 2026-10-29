@@ -2929,13 +2929,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const d2Display = d2Cell ? String(d2Cell.w ?? '').trim() : '';
         const d2Identifier = String(d2Display || (d2Cell?.v ?? '')).trim();
         sessionId = d2Identifier;
+        let savedSessionToRefresh = null;
         if (sessionId && !options.additional) {
           try {
             const savedSession = await loadPersistentSession(sessionId);
             if (savedSession && Array.isArray(savedSession.pickList) && savedSession.pickList.length) {
-              await restorePersistentSession(savedSession);
-              resolve({ restored: true });
-              return;
+              savedSessionToRefresh = savedSession;
             }
           } catch (error) {
             console.warn('Could not check for a saved D2 session:', error);
@@ -3148,6 +3147,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const secondaryOrder = document.getElementById('secondarySortOrder').value;
 
         sortPickList(primaryField, primaryOrder, secondaryField, secondaryOrder);
+
+        if (savedSessionToRefresh && !options.additional) {
+          const savedReportId = savedSessionToRefresh.reportMetadataList?.[0]?.id ||
+            savedSessionToRefresh.pickList.find(item => item.reportId)?.reportId || '';
+          const itemKey = item => `${item.originalSortIndex ?? ''}::${item.line ?? ''}::${String(item.code || '').trim()}`;
+          const savedItems = savedSessionToRefresh.pickList.filter(item => !savedReportId || item.reportId === savedReportId);
+          const savedByKey = new Map(savedItems.map(item => [itemKey(item), item]));
+          let refreshedLotCount = 0;
+          for (const importedItem of pickList) {
+            const savedItem = savedByKey.get(itemKey(importedItem));
+            const importedLot = String(importedItem.lot ?? '').trim();
+            if (!savedItem || !importedLot || /^(?:N\/A|--)$/.test(importedLot)) continue;
+            if (String(savedItem.lot ?? '') !== importedLot) {
+              savedItem.lot = importedLot;
+              refreshedLotCount++;
+            }
+          }
+          if (refreshedLotCount) savedSessionToRefresh.savedAt = new Date().toISOString();
+          await restorePersistentSession(savedSessionToRefresh);
+          if (refreshedLotCount) await persistCurrentSession();
+          const persistenceStatus = document.getElementById('sessionPersistenceStatus');
+          if (persistenceStatus) {
+            persistenceStatus.textContent = refreshedLotCount
+              ? `Saved session resumed · refreshed ${refreshedLotCount} lot number${refreshedLotCount === 1 ? '' : 's'} from the selected pick slip. Picking progress was kept.`
+              : `Saved session resumed · D2 ${sessionId}. Picking progress was kept.`;
+            persistenceStatus.style.color = '#167344';
+          }
+          resolve({ restored: true, refreshedLotCount });
+          return;
+        }
 
         pickList.forEach(item => { item.reportId = activeImportReportId; });
         const reportMetadata = createCurrentReportMetadata(file, activeImportReportId);
