@@ -2782,6 +2782,53 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return [];
     }
 
+
+    function sourceLotRowKey(line, itemCode) {
+      const lineText = String(line ?? '').trim().replace(/^0+(?=\d)/, '');
+      const codeText = String(itemCode ?? '').trim().toUpperCase();
+      return `${lineText}::${codeText}`;
+    }
+
+    function findRawLotSerialValuesInSourceHtml(arrayBuffer) {
+      const values = new Map();
+      try {
+        const source = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer));
+        if (!/<(?:html|body|table|tr|td)\b/i.test(source)) return values;
+        const doc = new DOMParser().parseFromString(source, 'text/html');
+        const rows = Array.from(doc.querySelectorAll('tr'));
+        let headerRowIndex = -1;
+        let lineIndex = -1;
+        let itemIndex = -1;
+        let lotIndex = -1;
+        for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+          const cells = Array.from(rows[rowIndex].querySelectorAll(':scope > td, :scope > th'));
+          const headers = cells.map(cell => String(cell.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase());
+          const foundItem = headers.findIndex(value => value.includes('item') && !value.includes('description'));
+          const foundLot = headers.findIndex(value => (value.includes('lot') || value.includes('serial')) && !value.includes('parent'));
+          if (foundItem >= 0 && foundLot >= 0) {
+            headerRowIndex = rowIndex;
+            lineIndex = headers.findIndex(value => value === 'line' || value.includes('line number'));
+            itemIndex = foundItem;
+            lotIndex = foundLot;
+            break;
+          }
+        }
+        if (headerRowIndex < 0) return values;
+        for (let rowIndex = headerRowIndex + 1; rowIndex < rows.length; rowIndex++) {
+          const cells = Array.from(rows[rowIndex].querySelectorAll(':scope > td, :scope > th'));
+          if (cells.length <= Math.max(itemIndex, lotIndex, lineIndex)) continue;
+          const itemCode = String(cells[itemIndex]?.textContent || '').replace(/\s+/g, ' ').trim();
+          const lot = String(cells[lotIndex]?.textContent || '').replace(/\s+/g, ' ').trim();
+          if (!itemCode || !lot) continue;
+          const line = lineIndex >= 0 ? String(cells[lineIndex]?.textContent || '').trim() : '';
+          values.set(sourceLotRowKey(line, itemCode), lot);
+        }
+      } catch (error) {
+        console.warn('Could not read the original HTML Lot/Serial text:', error);
+      }
+      return values;
+    }
+
     function findIrFooterRowInRawData(rawData, headerIdx, itemIdx) {
       if (!Array.isArray(rawData) || rawData.length === 0) return [];
 
@@ -3002,6 +3049,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const expIdx = headers.findIndex(h => h.includes('expiry') || h.includes('exp'));
         const uomIdx = headers.findIndex(h => h.includes('uom'));
         const qtyIdx = headers.findIndex(h => h.includes('quantity') || h.includes('qty'));
+        const sourceHtmlLotValues = findRawLotSerialValuesInSourceHtml(e.target.result);
 
         pickList = [];
         confirmedPickCount = 0;
@@ -3114,9 +3162,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             return rawValue !== undefined && rawValue !== null ? String(rawValue) : 'N/A';
           }
 
-          const lotValue = lotIdx !== -1
-            ? getLotSerialText(lotCell, row[lotIdx])
-            : 'N/A';
+          const sourceHtmlLot = lineIdx !== -1
+            ? sourceHtmlLotValues.get(sourceLotRowKey(row[lineIdx], itemCode))
+            : undefined;
+          const lotValue = sourceHtmlLot !== undefined
+            ? sourceHtmlLot
+            : (lotIdx !== -1 ? getLotSerialText(lotCell, row[lotIdx]) : 'N/A');
 
           pickList.push({
             reportId: activeImportReportId,
@@ -4973,6 +5024,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if(typeof XLSX==='undefined'){ $('importStatus').textContent='The spreadsheet reader did not load. Connect to the internet, reload this page, then try again.'; return; }
       try{
         const bytes=await file.arrayBuffer();
+        const sourceHtmlLotValues=findRawLotSerialValuesInSourceHtml(bytes);
         sourceReportBase64=arrayBufferToBase64(bytes);
         try { localStorage.setItem(SOURCE_REPORT_KEY,sourceReportBase64); localStorage.setItem(SOURCE_REPORT_SAVED_AT_KEY,new Date().toISOString()); } catch (storageError) { try { localStorage.removeItem(SOURCE_REPORT_KEY); localStorage.removeItem(SOURCE_REPORT_SAVED_AT_KEY); } catch (cleanupError) {} console.warn('The source workbook could not be saved for a later export; keep this tab open or re-upload the picking report before exporting.',storageError); }
         const book=XLSX.read(bytes,{type:'array',cellDates:true});
@@ -4993,6 +5045,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const nameCol=findHeader(headers,['itemdescription','description','itemname']);
           const locCol=findHeader(headers,['location','storelocation','binlocation']);
           const lotCol=findHeader(headers,['lotserial','lot','serial']);
+          const lineCol=findHeader(headers,['line','linenumber','linenumberid']);
           const expCol=findHeader(headers,['expirydate','expiry','expirationdate','expdate']);
           const reqCol=findHeader(headers,['quantityrequested','quantity','qtyrequested','requestedqty']);
           const revisedCol=findHeader(headers,['quantityrevised','revisedquantity','qtyrevised','revisedqty']);
@@ -5007,7 +5060,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const pending=status==='PENDING';
             const hasRevisedQuantity=revisedCol>=0&&Boolean(revised);
             const lotCell = lotCol >= 0 ? sheet[XLSX.utils.encode_cell({r:i,c:lotCol})] : null;
-            const lot = formatDoubleCheckLot(lotCell, lotCol >= 0 ? raw[lotCol] : '');
+            const sourceHtmlLot = lineCol >= 0 ? sourceHtmlLotValues.get(sourceLotRowKey(raw[lineCol], code)) : undefined;
+            const lot = sourceHtmlLot !== undefined ? sourceHtmlLot : formatDoubleCheckLot(lotCell, lotCol >= 0 ? raw[lotCol] : '');
             const packageParts = [['Pack',findHeader(headers,['packsize','unitsperpack'])],['Carton',findHeader(headers,['cartonsize','packspercarton'])],['Catch',findHeader(headers,['catchsize','packspercatch'])],['Strip',findHeader(headers,['stripsize','unitsperstrip'])]]
               .filter(([,column]) => column >= 0 && String(raw[column] ?? '').trim())
               .map(([label,column]) => label + ': ' + String(raw[column]).trim());
